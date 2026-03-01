@@ -15,7 +15,7 @@ public:
     /**
         Point to this instance, for use with raw GDExtension interface functions.
     */
-    @property GDExtensionStringPtr self() => cast(GDExtensionStringPtr)&this;
+    @property GDExtensionStringPtr native_ptr() inout => cast(GDExtensionStringPtr)&this;
 
     // @property size_t length() {
         
@@ -37,21 +37,21 @@ public:
         Constructs a new godot string from a D string.
     */
     this(string text) {
-        string_new_with_utf8_chars_and_len2(this.self, text.ptr, cast(int)text.length);
+        string_new_with_utf8_chars_and_len2(this.native_ptr, text.ptr, cast(int)text.length);
     }
 
     /**
         Constructs a new godot string from a D string.
     */
     this(wstring text) {
-        string_new_with_utf16_chars_and_len2(this.self, text.ptr, cast(int)text.length, false);
+        string_new_with_utf16_chars_and_len2(this.native_ptr, text.ptr, cast(int)text.length, false);
     }
 
     /**
         Constructs a new godot string from a D string.
     */
     this(dstring text) {
-        string_new_with_utf32_chars_and_len(this.self, text.ptr, cast(int)text.length);
+        string_new_with_utf32_chars_and_len(this.native_ptr, text.ptr, cast(int)text.length);
     }
 
     /**
@@ -61,8 +61,8 @@ public:
             size = The new size.
     */
     void resize(size_t size) {
-        string_resize(this.self, cast(int)size+1);
-        *string_operator_index(this.self, cast(int)size) = 0;
+        string_resize(this.native_ptr, cast(int)size+1);
+        *string_operator_index(this.native_ptr, cast(int)size) = 0;
     }
 }
 
@@ -75,6 +75,11 @@ private:
     void[VARIANT_SIZE_STRINGNAME] data_;
 
 public:
+
+    /**
+        Point to this instance, for use with raw GDExtension interface functions.
+    */
+    @property GDExtensionStringNamePtr native_ptr() inout => cast(GDExtensionStringNamePtr)&this;
 
     /// Destructor.
     ~this() {

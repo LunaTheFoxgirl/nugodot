@@ -5,6 +5,12 @@ module godot.core.gdextension;
 import godot.core.gdextension.iface;
 
 /**
+    The class library which will be set by godot on loading
+    your extension.
+*/
+export GDExtensionClassLibraryPtr __godot_class_library;
+
+/**
     Loads all of the godot extension interface functions.
 
     Params:

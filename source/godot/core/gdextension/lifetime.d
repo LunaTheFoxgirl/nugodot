@@ -30,6 +30,5 @@ Ref!T gd_new(T, Args...)(Args args) @nogc {
         value = The given value to free.
 */
 void gd_delete(T)(ref Ref!T value) @nogc {
-
-    value = (Ref!T).init;
+    nogc_delete(value);
 }

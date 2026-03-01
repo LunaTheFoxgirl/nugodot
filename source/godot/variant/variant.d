@@ -3,6 +3,9 @@ import godot.core.gdextension.iface;
 import godot.core.gdextension.variant_size;
 import godot.core.gdextension.utils;
 import godot.variant.string;
+import godot.variant.rect;
+import godot.variant.vector;
+import godot.variant.aabb;
 import numem;
 
 /**
@@ -95,13 +98,37 @@ public:
     }
 
     /**
+        Constructs a variant from an boolean.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(bool value) {
+        variant_from_bool(this.ptr, &value);
+    }
+
+    /**
+        Constructs a variant from an integer.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this(T)(T value)
+    if (__traits(isIntegral, T)) {
+        long tmp_ = value;
+        variant_from_int(this.ptr, &tmp_);
+    }
+
+    /**
         Constructs a variant from a double.
 
         Params:
             value = The new value to give the variant.
     */
-    this(double value) {
-        variant_from_float(this.ptr, &value);
+    this(T)(T value)
+    if (__traits(isFloating, T)) {
+        double tmp_ = value;
+        variant_from_float(this.ptr, &tmp_);
     }
 
     /**
@@ -121,8 +148,108 @@ public:
         Params:
             value = The new value to give the variant.
     */
-    this(String value) {
+    this()(auto ref String value) {
         variant_from_string(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a string name.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref StringName value) {
+        variant_from_string_name(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a vector.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Vector2 value) {
+        variant_from_vector2(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a vector.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Vector2i value) {
+        variant_from_vector2i(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a vector.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Vector3 value) {
+        variant_from_vector3(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a vector.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Vector3i value) {
+        variant_from_vector3i(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a vector.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Vector4 value) {
+        variant_from_vector4(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a vector.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Vector4i value) {
+        variant_from_vector4i(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a 2D rectangle.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Rect2 value) {
+        variant_from_rect2(&this, &value);
+    }
+
+    /**
+        Constructs a variant from a 2D rectangle.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref Rect2i value) {
+        variant_from_rect2i(&this, &value);
+    }
+
+    /**
+        Constructs a variant from an axis aligned bounding box.
+
+        Params:
+            value = The new value to give the variant.
+    */
+    this()(auto ref AABB value) {
+        variant_from_aabb(&this, &value);
     }
 
     /**
