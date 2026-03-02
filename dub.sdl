@@ -1,22 +1,26 @@
-name "nugodot-d"
+name "nugodot"
 description "Godot GDExtension for D"
 authors "Luna"
 copyright "Copyright © 2026, Luna"
 license "BSL-1.0"
 
+// Tool used to auto-generate the bindings.
 subPackage "modules/gdegen"
 
-dependency "numem" version="~>1.6.4"
+// The actual library setup
+toolchainRequirements ldc=">=1.40.0" gdc="no" dmd="no"
+dependency "numem" version=">=1.6.4"
+dependency "nulib" version=">=0.3.12"
 targetPath "out/"
 
 buildRequirements "silenceWarnings"
 
 configuration "build" {
-    targetType "dynamicLibrary"
+    targetType "sourceLibrary"
     preGenerateCommands "dub run :gdegen -- --dir=$PACKAGE_DIR"
 }
 
 configuration "rebuild" {
-    targetType "dynamicLibrary"
+    targetType "sourceLibrary"
     preGenerateCommands "dub run :gdegen -- --force --dir=$PACKAGE_DIR"
 }

@@ -267,3 +267,43 @@ public:
         return result;
     }
 }
+
+/**
+    Gets the variant type tag of the given D type.
+*/
+template variantTypeOf(T) {
+    import godot.core.gdextension.object : GDEObject;
+    import godot.core.gdextension.iface;
+    import godot.variant;
+
+    static if (is(T == bool))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_BOOL;
+    else static if (__traits(isIntegral, T))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_INT;
+    else static if (__traits(isFloating, T))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_FLOAT;
+    else static if (is(T == String))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_STRING;
+    else static if (is(T == Vector2))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR2;
+    else static if (is(T == Vector2i))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR2I;
+    else static if (is(T == Rect2))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_RECT2;
+    else static if (is(T == Rect2i))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_RECT2I;
+    else static if (is(T == Vector3))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR3;
+    else static if (is(T == Vector3i))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR3I;
+    else static if (is(T == AABB))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_AABB;
+    else static if (is(T == StringName))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_STRING_NAME;
+    else static if (is(T == NodePath))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_NODE_PATH;
+    else static if (is(T : GDEObject))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_OBJECT;
+    else
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_NIL;
+}

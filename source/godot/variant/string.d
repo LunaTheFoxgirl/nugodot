@@ -93,3 +93,19 @@ public:
         string_name_new_with_utf8_chars_and_len(&this, name.ptr, cast(int)name.length);
     }
 }
+
+/**
+    A node path.
+*/
+struct NodePath {
+private:
+@nogc:
+    void[VARIANT_SIZE_NODEPATH] data;
+
+public:
+
+    /// Destructor
+    ~this() {
+        node_path_destroy(&this);
+    }
+}

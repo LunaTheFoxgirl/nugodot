@@ -2,6 +2,10 @@
 
 NuGodot is numem based bindings to GDExtension, allowing writing Godot extensions in DLang using nogc D constructs.
 
+## Requirements
+
+LDC 1.40 or newer is required to compile the project. `nugodot` uses `@section` from LDC to automate loading
+bound classes.
 
 ## Building the bindings
 

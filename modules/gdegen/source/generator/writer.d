@@ -382,7 +382,7 @@ public:
         // Function prototypes
         if (auto fp_t = cast(GDEFuncPrototype)type) {
             this.writeDDOC(fp_t.ddoc);
-            this.writefln("alias %s = %s function(%s);", fp_t.name, fp_t.returnType.name, fp_t.params.toParamList(false).join(", "));
+            this.writefln("alias %s = %s function(%s);", fp_t.name, fp_t.returnType.name, fp_t.params.toParamList(true).join(", "));
             return;
         }
         

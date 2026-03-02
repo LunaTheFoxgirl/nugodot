@@ -8,7 +8,7 @@ import godot.core.gdextension.iface;
     The class library which will be set by godot on loading
     your extension.
 */
-export GDExtensionClassLibraryPtr __godot_class_library;
+export __gshared GDExtensionClassLibraryPtr __godot_class_library;
 
 /**
     Loads all of the godot extension interface functions.
@@ -20,11 +20,44 @@ void loadGodot(GDExtensionInterfaceGetProcAddress getProcAddr) @nogc nothrow {
     loadGodotImpl!()(getProcAddr);
 }
 
+/**
+    Injected entrypoint of your godot plugin.
+*/
+extern(C) export GDExtensionBool __gde_library_initialize(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) @nogc nothrow {
+    __godot_class_library = p_library;
+    loadGodot(p_get_proc_address);
+
+    r_initialization.initialize = &__gde_extension_init;
+    r_initialization.deinitialize = &__gde_extension_shutdown;
+    r_initialization.minimum_initialization_level = GDEXTENSION_INITIALIZATION_CORE;
+    
+    return true;
+}
 
 //
 //              IMPLEMENTATION DETAILS
 //
 private:
+
+extern(C) void __gde_extension_init(void *p_userdata, GDExtensionInitializationLevel p_level) @nogc nothrow {
+    import godot.core.gdextension.utils : getExtensionClassStartupFunctions;
+
+    if (p_level == GDEXTENSION_INITIALIZATION_CORE) {    
+        foreach(startupFunc; getExtensionClassStartupFunctions()) {
+            startupFunc();
+        }
+    }
+}
+
+extern(C) void __gde_extension_shutdown(void *p_userdata, GDExtensionInitializationLevel p_level) @nogc nothrow {
+    import godot.core.gdextension.utils : getExtensionClassCleanupFunctions;
+
+    if (p_level == GDEXTENSION_INITIALIZATION_CORE) {
+        foreach(cleanupFunc; getExtensionClassCleanupFunctions()) {
+            cleanupFunc();
+        }
+    }
+}
 
 template loadGodotImpl() {
     import godot.core.gdextension.iface;

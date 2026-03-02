@@ -19,7 +19,7 @@ enum GDE_API = 1;
         The JSON trees for the interface and extension APIs.
 */
 JSONValue[2] parseGDEJson(string exec) {
-    auto gd = execute([exec, "--headless", "--dump-gdextension-interface-json", "--dump-extension-api", "--quit"]);
+    auto gd = execute([exec, "--headless", "--dump-gdextension-interface-json", "--dump-extension-api-with-docs", "--quit"]);
     enforce(gd.status == 0, new ErrnoException(gd.output, gd.status));
     enforce(
         exists("gdextension_interface.json") && exists("extension_api.json"), 
