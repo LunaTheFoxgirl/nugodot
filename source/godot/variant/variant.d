@@ -269,12 +269,106 @@ public:
 }
 
 /**
+    Unwraps the given variant to a D type.
+
+    Params:
+        variant = The variant to unwrap.
+
+    Returns:
+        The unwrapped value.
+*/
+T unwrap(T)(ref Variant variant) @nogc
+if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
+    import godot.core.gdextension.lifetime : gde_get;
+    T result;
+    variant.unwrap_to!T(result);
+    return result;
+}
+
+void unwrap_to(T)(ref Variant from, ref T to)  @nogc
+if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
+    static if (is(T == bool)) {
+        bool_from_variant(&to, &from);
+    } else static if (__traits(isIntegral, T)) {
+        static if (__traits(isUnsigned, T))
+            ulong _tmp;
+        else
+            long _tmp;
+        
+        int_from_variant(&_tmp, &from);
+        to = cast(T)_tmp;
+    } else static if (__traits(isFloating, T)) {
+        double _tmp;
+        int_from_variant(&_tmp, &from);
+        to = cast(T)_tmp;
+    } else static if (is(T == String)) {
+        string_from_variant(&result, &from);
+    } else static if (is(T == string)) {
+
+        String _tmp;
+        string_from_variant(&_tmp, &from);
+        to = _tmp.toString();
+    } else static if (is(T : GDEObject)) {
+        GDExtensionObjectPtr _tmp;
+        object_from_variant(&_tmp, &from);
+        to = gde_get!T(_tmp);
+    } else {
+        static assert(0, "Unwrapping of type "~T.stringof~" is not currently supported!");
+    }
+}
+
+/**
+    Wraps the given D type in a variant.
+
+    Params:
+        value = The value to wrap.
+
+    Returns:
+        The wrapped value.
+*/
+Variant wrap(T)(auto ref T value) @nogc
+if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
+    import nulib.string;
+
+    Variant result;
+    static if (is(T == bool)) {
+
+        variant_from_bool(&result, &value);
+    } else static if (__traits(isIntegral, T)) {
+
+        static if (__traits(isUnsigned, T))
+            ulong _tmp = cast(ulong)value;
+        else
+            long _tmp = cast(long)value;
+        
+        variant_from_int(&result, &_tmp);
+    } else static if (__traits(isFloating, T)) {
+        
+        double _tmp = cast(double)value;
+        variant_from_float(&result, &_tmp);
+    } else static if (is(T == String)) {
+        
+        variant_from_string(&result, &value);
+    } else static if (is(T == string)) {
+
+        variant_from_string(&result, gde_make_string(value[]));
+    } else static if (is(T : GDEObject)) {
+
+        variant_from_object(&result, value.native_ptr);
+    } else {
+        static assert(0, "Wrapping of type "~T.stringof~" is not currently supported!");
+    }
+    return result;
+}
+
+/**
     Gets the variant type tag of the given D type.
 */
 template variantTypeOf(T) {
     import godot.core.gdextension.object : GDEObject;
     import godot.core.gdextension.iface;
     import godot.variant;
+    import nulib.string;
 
     static if (is(T == bool))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_BOOL;
@@ -282,7 +376,7 @@ template variantTypeOf(T) {
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_INT;
     else static if (__traits(isFloating, T))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_FLOAT;
-    else static if (is(T == String))
+    else static if (is(T == String) || is(T == string) || is(T == nstring))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_STRING;
     else static if (is(T == Vector2))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR2;

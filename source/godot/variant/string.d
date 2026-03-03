@@ -1,6 +1,9 @@
 module godot.variant.string;
 import godot.core.gdextension.iface;
 import godot.core.gdextension.variant_size;
+import numem.core.memory;
+import numem.core.hooks;
+import nulib.string;
 
 /**
     A godot string.
@@ -64,6 +67,38 @@ public:
         string_resize(this.native_ptr, cast(int)size+1);
         *string_operator_index(this.native_ptr, cast(int)size) = 0;
     }
+
+    /**
+        Gets a string representation of the godot string.
+
+        Note:
+            This string must be freed with nu_freea!
+        
+        Returns:
+            A D string representation of this string.
+    */
+    string toString() const {
+        char[] str_ = nu_malloca!char(string_to_utf8_chars(&this, null, 0));
+        string_to_utf8_chars(&this, cast(char*)str_.ptr, cast(int)str_.length);
+        return cast(string)str_;
+    }
+}
+
+/**
+    Constructs a new heap allocated string.
+
+    This string must be freed by your using $(D nogc_delete)!
+
+    Params:
+        value = The value to set the new string to.
+    
+    Returns:
+        The newly constructed string.
+*/
+String* gde_make_string(string value) @nogc {
+    String* result = cast(String*)nu_malloc(String.sizeof);
+    string_new_with_utf8_chars_and_len2(result, value.ptr, cast(int)value.length);
+    return result;
 }
 
 /**
