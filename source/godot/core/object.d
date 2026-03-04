@@ -2,13 +2,13 @@
     Module which implements the needed infrastructure to wrap
     Godot objects with D objects.
 */
-module godot.core.gdextension.object;
-import godot.core.gdextension.lifetime;
-import godot.core.gdextension.iface;
+module godot.core.object;
 import godot.core.gdextension;
+import godot.core.lifetime;
+import godot.core.traits;
+import godot.core;
 import godot.variant.variant;
 import godot.variant.string;
-import numem.core.traits;
 import numem;
 
 /**
@@ -136,7 +136,7 @@ if (is(T : GDEObject)) {
 
     static if (!__traits(isAbstractClass, T)) {
 
-        // NOTE:    Allocate and base initialize the class.
+        // NOTE:    Allocate and base-initialize the class.
         //          This will NOT call any constructors.
         const void[] __initSym = __traits(initSymbol, T);
         T obj = cast(T)nu_malloc(AllocSize!T);
@@ -156,54 +156,18 @@ if (is(T : GDEObject)) {
 }
 
 /**
-    Gets the icon path for a given Godot class.
-*/
-template getClassIconPath(T) {
-    static if(is(T : GDEObject) && hasUDA!(T, class_icon)) {
-        enum string getClassIconPath = getUDAs!(T, class_icon)[0].path;
-    } else {
-        enum string getClassIconPath = null;
-    }
-}
-
-/**
-    Gets the Godot class name of the given type.
-*/
-template classNameOf(T)
-if (is(T : GDEObject)) {
-    import godot.core.gdextension.object : class_name;
-    import numem.core.traits : hasUDA, getUDAs;
-
-    static if (hasUDA!(T, class_name)) {
-        enum classNameOf = getUDAs!(T, class_name)[0].name;
-    } else {
-        enum classNameOf = __traits(identifier, T);
-    }
-}
-
-/**
-    Gets whether the given class is a native godot class.
-    This is determined by whether the class is located
-    within the `godot.` module.
-*/
-template isGodotNativeClass(T) {
-    enum GODOT_MODULE_PATH = "godot.";
-    enum FQN = __traits(fullyQualifiedName, T);
-    
-    enum FQN_PREFIX = FQN[0..nu_min(FQN.length, GODOT_MODULE_PATH.length)];
-    enum isGodotNativeClass = FQN_PREFIX == GODOT_MODULE_PATH;
-}
-
-/**
     Registers a class with Godot.
 */
 template GodotClass(T)
 if (is(T : GDEObject)) {
     import ldc.attributes;
-    import godot.core.gdextension.iface;
-    import godot.core.gdextension.lifetime;
-    import godot.core.gdextension : __godot_class_library;
-    import godot.core.gdextension.utils : GDClassStartupFunc, GDClassCleanupFunc;
+    import godot.core.gdextension;
+    import godot.core.lifetime;
+    import godot.core.traits;
+    import godot.core.wrap;
+    import godot.core;
+    import godot.variant.string;
+
     import numem.core.hooks : nu_malloc, nu_free;
     import numem : nogc_new, nogc_delete;
 
@@ -220,85 +184,6 @@ if (is(T : GDEObject)) {
     //
     //                  HELPER TEMPLATES.
     //
-
-    private template getMemberFuncs(T) {
-        import numem.core.math : nu_min;
-        import numem.core.meta : Filter;
-        import numem.core.traits : FunctionTypeOf;
-
-        enum isMethod(alias member) = is(FunctionTypeOf!(mixin(T, ".", member)) == return) && !(member[0..nu_min(2, member.length)] == "__");
-        alias getMemberFuncs = Filter!(isMethod, __traits(derivedMembers, T));
-    }
-
-    private template isPropertyFunc(alias func) {
-        import numem.core.meta : Filter;
-
-        enum isPropertyAttrib(string attrib) = attrib == "@property";
-        enum isPropertyFunc = Filter!(isPropertyAttrib, __traits(getFunctionAttributes, func)).length != 0;
-    }
-
-    private template methodFlagsOf(alias func) {
-        enum uint methodFlagsOf = 
-            GDEXTENSION_METHOD_FLAG_NORMAL | 
-            (__traits(isStaticFunction, func) ? cast(uint)GDEXTENSION_METHOD_FLAG_STATIC : 0) |
-            (__traits(isAbstractFunction, func) ? cast(uint)GDEXTENSION_METHOD_FLAG_VIRTUAL_REQUIRED : 0) |
-            (__traits(isVirtualMethod, func) ? cast(uint)GDEXTENSION_METHOD_FLAG_VIRTUAL : 0);
-    }
-
-    private template getGetterFunc(T, alias name) {
-        import numem.core.traits : ReturnType, Parameters;
-        import numem.core.meta : Filter;
-
-        enum isGetterFunc(alias func) = Parameters!(func).length == 0 && !is(ReturnType!(func) == void);
-        alias getterFunc = Filter!(isGetterFunc, __traits(getOverloads, T, name));
-
-        static if (getterFunc.length > 0)
-            alias getGetterFunc = getterFunc[0];
-    }
-
-    private template getSetterFunc(T, alias name) {
-        import numem.core.traits : ReturnType, Parameters;
-        import numem.core.meta : Filter;
-
-        enum isSetterFunc(alias func) = Parameters!(func).length == 1;
-        alias setterFunc = Filter!(isSetterFunc, __traits(getOverloads, T, name));
-
-        static if (setterFunc.length > 0)
-            alias getSetterFunc = setterFunc[0];
-    }
-
-    private template getPropertyType(T, alias name) {
-        import numem.core.traits : ReturnType, Parameters;
-
-        static if (is(typeof(mixin(T, ".", name)))) {
-            alias getPropertyType = typeof(mixin(T, ".", name));
-        } else static if (Parameters!(getSetterFunc!(T, name)).length == 1) {
-            alias getPropertyType = Parameters!(getSetterFunc!(T, name))[0];
-        } else {
-            static assert(0, "No valid getters or setters found for property ", name, "!");
-        }
-    }
-
-    private template toSnakeCase(string value) {
-        enum toSnakeCase = (string v) {
-            if (__ctfe) {
-                import std.uni : isUpper, toLower;
-
-                string out_;
-                foreach(c; v) {
-                    if (isUpper(c)) {
-                        out_ ~= "_";
-                        out_ ~= toLower(c);
-                        continue;
-                    }
-
-                    out_ ~= c;
-                }
-                return out_;
-            }
-            return null;
-        }(value);
-    }
 
     pragma(inline, true)
     private void gde_bind_member(T, alias member)() @nogc {
@@ -365,21 +250,23 @@ if (is(T : GDEObject)) {
         StringName p_classname = StringName(classNameOf!T);
         enum gdMemberName = toSnakeCase!(memberName);
 
-        alias memberRef = mixin(T, ".", memberName);
         alias propType = getPropertyType!(T, memberName);
-        enum propHasGetter = is(typeof(() => mixin(T, ".init.", memberName, "()")));
-        enum propHasSetter = is(typeof(() => mixin(T, ".init.", memberName, "(", propType, ".init", ")")));
+        alias propFuncs = getPropertyFunctions!(T, memberName);
+        enum propHasGetter = !is(propFuncs[0] == void);
+        enum propHasSetter = !is(propFuncs[1] == void);
+
+        alias memberRef = mixin(T, ".", memberName);
         
         static if (propHasGetter) {
             enum getterName = "_get_"~gdMemberName;
-            gde_bind_method!(T, getGetterFunc!(T, memberName))(getterName);
+            gde_bind_method!(T, propFuncs[0])(getterName);
         } else {
             enum getterName = "";
         }
 
         static if (propHasSetter) {
             enum setterName = "_set_"~gdMemberName;
-            gde_bind_method!(T, getSetterFunc!(T, memberName))(setterName);
+            gde_bind_method!(T, propFuncs[1])(setterName);
         } else {
             enum setterName = "";
         }
@@ -395,163 +282,6 @@ if (is(T : GDEObject)) {
         gde_free_string_name(p_setter_name);
     }
 
-    pragma(inline, true)
-    private GDExtensionClassMethodPtrCall gde_wrap_method_ptrcall(T, alias method)() @nogc {
-        import numem.core.traits;
-        import numem.core.meta;
-        
-        return cast(GDExtensionClassMethodPtrCall)(void* method_userdata, GDExtensionClassInstancePtr p_instance, const(GDExtensionConstTypePtr)* p_args, GDExtensionTypePtr r_ret) @nogc {
-            static if (is(ReturnType!(mixin(method))))
-                alias returnType = ReturnType!(mixin(method));
-            else
-                alias returnType = void;
-            
-            T obj_ = cast(T)p_instance;
-            Parameters!(method) __args;
-            static foreach(i; 0..__args.length) {
-                __args[i] = *(cast(typeof(__args[i])*)p_args[i]);
-            }
-
-            static if (!is(returnType == void))
-                *(cast(returnType*)r_ret) = __traits(getMember, obj_, __traits(identifier, method))(__args);
-            else
-                __traits(getMember, obj_, __traits(identifier, method))(__args);
-        };
-    }
-
-    pragma(inline, true)
-    private GDExtensionClassMethodCall gde_wrap_method_call(T, alias method)() @nogc {
-        import numem.core.traits;
-        import numem.core.meta;
-
-        return cast(GDExtensionClassMethodCall)(void* method_userdata, GDExtensionClassInstancePtr p_instance, const(GDExtensionConstVariantPtr)* p_args, GDExtensionInt p_argument_count, GDExtensionVariantPtr r_return, GDExtensionCallError* r_error) {
-            static if (is(ReturnType!(FunctionTypeOf!method)))
-                alias returnType = ReturnType!(FunctionTypeOf!method);
-            else
-                alias returnType = void;
-
-            enum paramCount = Parameters!(method).length;
-
-            // Types
-            Parameters!(method) __args;
-            T obj_ = cast(T)p_instance;
-
-            // Too few args
-            if (p_argument_count < paramCount) {
-                r_error.error = GDEXTENSION_CALL_ERROR_TOO_FEW_ARGUMENTS;
-                r_error.expected = paramCount;
-                return;
-            }
-
-            // Too many arguments.
-            if (p_argument_count > paramCount) {
-                r_error.error = GDEXTENSION_CALL_ERROR_TOO_MANY_ARGUMENTS;
-                r_error.expected = paramCount;
-                return;
-            }
-
-            // Invalid instance.
-            if (!obj_) {
-                r_error.error = GDEXTENSION_CALL_ERROR_INSTANCE_IS_NULL;
-                return;
-            }
-
-            // Type cast variants.
-            Variant*[] p_vargs = (cast(Variant**)p_args)[0..p_argument_count];
-
-            // Unwrap the arguments into ones that the DLang side understands.
-            static foreach(i; 0..__args.length) {
-                __args[i] = unwrap!(typeof(__args[i]))(*p_vargs[i]);
-            }
-
-            // Wrap the return value to something that Godot understands, if needed.
-            static if (!is(returnType == void)) {
-                *(cast(Variant*)r_return) = wrap!returnType(__traits(getMember, obj_, __traits(identifier, method))(__args));
-            } else {
-                __traits(getMember, obj_, __traits(identifier, method))(__args);
-            }
-
-            static foreach(i; 0..__args.length) {
-                variant_destroy(p_vargs[i]);
-            }
-        };
-    }
-
-    pragma(inline, true)
-    private GDExtensionPropertyInfo gde_make_property_info(T)(string name, uint hint = 0, string hintString = null, uint usageFlags = 0) @nogc {
-        static if (is(T : GDEObject))
-            string class_name = classNameOf!T;
-        else
-            string class_name;
-
-        StringName* p_name = cast(StringName*)nu_malloc(StringName.sizeof);
-        string_name_new_with_utf8_chars_and_len(p_name, name.ptr, cast(int)name.length);
-        
-        StringName* p_classname = cast(StringName*)nu_malloc(StringName.sizeof);
-        string_name_new_with_utf8_chars_and_len(p_classname, class_name.ptr, cast(int)class_name.length);
-
-        String* p_hint_string = cast(String*)nu_malloc(String.sizeof);
-        string_new_with_utf8_chars_and_len2(p_hint_string, hintString.ptr, cast(int)hintString.length);
-
-        return GDExtensionPropertyInfo(
-            type: variantTypeOf!T,
-            name: p_name,
-            class_name: p_classname,
-            hint: hint,
-            hint_string: p_hint_string,
-            usage: usageFlags,
-        );
-    }
-
-    pragma(inline, true)
-    void gde_destroy_property_info(ref GDExtensionPropertyInfo info) @nogc {
-        if (info.name) {
-            string_name_destroy(info.name);
-            nu_free(info.name);
-            info.name = null;
-        }
-
-        if (info.class_name) {
-            string_name_destroy(info.class_name);
-            nu_free(info.class_name);
-            info.class_name = null;
-        }
-
-        if (info.hint_string) {
-            string_destroy(info.hint_string);
-            nu_free(info.hint_string);
-            info.hint_string = null;
-        }
-    }
-
-    pragma(inline, true)
-    private StringName* gde_make_string_name(string value) @nogc {
-        StringName* result = cast(StringName*)nu_malloc(StringName.sizeof);
-        string_name_new_with_utf8_chars_and_len(result, value.ptr, cast(int)value.length);
-        return result;
-    }
-
-    pragma(inline, true)
-    private void gde_free_string_name(ref StringName* name) @nogc {
-        string_name_destroy(name);
-        nu_free(name);
-        name = null;
-    }
-
-    pragma(inline, true)
-    private String* gde_make_string(string value) @nogc {
-        String* result = cast(String*)nu_malloc(String.sizeof);
-        string_new_with_utf8_chars_and_len2(result, value.ptr, cast(int)value.length);
-        return result;
-    }
-
-    pragma(inline, true)
-    private void gde_free_string(ref String* str) @nogc {
-        string_destroy(str);
-        nu_free(str);
-        str = null;
-    }
-
 
     //
     //                  IMPLEMENTATION
@@ -561,7 +291,7 @@ if (is(T : GDEObject)) {
     static if (is(T PT == super)) {
 
         // Instance constructor forwarder.
-        pragma(mangle, "__gde_class_create_"~classNameOf!T)
+        pragma(mangle, gdeMangleOf!(T, __gde_class_create))
         extern(C) GDExtensionObjectPtr __gde_class_create(void* p_userdata, GDExtensionBool p_postinit) @nogc {
             StringName parentClassName = classNameOf!PT;
             void* pObject = classdb_construct_object2(&parentClassName);
@@ -570,20 +300,20 @@ if (is(T : GDEObject)) {
         }
 
         // Instance free forwarder.
-        pragma(mangle, "__gde_class_free_"~classNameOf!T)
+        pragma(mangle, gdeMangleOf!(T, __gde_class_free))
         extern(C) void __gde_class_free(void* p_userdata, GDExtensionClassInstancePtr p_instance) @nogc {
             GDEObject pObject = cast(GDEObject)p_instance;
             nogc_delete(pObject);
         }
 
         // Instance recreate forwarder.
-        pragma(mangle, "__gde_class_recreate_"~classNameOf!T)
+        pragma(mangle, gdeMangleOf!(T, __gde_class_recreate))
         extern(C) GDExtensionClassInstancePtr __gde_class_recreate(void* p_userdata, GDExtensionObjectPtr p_object) @nogc {
             return cast(GDExtensionClassInstancePtr)gde_alloc_class!T(p_object);
         }
 
         // Registration function
-        pragma(mangle, "__gde_class_register_"~classNameOf!T)
+        pragma(mangle, gdeMangleOf!(T, __gde_register))
         extern(C) void __gde_register() @nogc {
             static if (getClassIconPath!T !is null) {
                 __gshared String __gde_icon_path;
@@ -627,26 +357,26 @@ if (is(T : GDEObject)) {
                 classdb_register_extension_class5(__godot_class_library, &className, &pClassName, &classInfo);
 
                 // Bind methods and properties.
-                static foreach(member; getMemberFuncs!T) {
+                static foreach(member; boundMethodsOf!T) {
                     gde_bind_member!(T, member)();
                 }
             }
         }
 
         // Registration function
-        pragma(mangle, "__gde_class_unregister_"~classNameOf!T)
+        pragma(mangle, gdeMangleOf!(T, __gde_unregister))
         extern(C) void __gde_unregister() @nogc {
             StringName className = classNameOf!T;
             classdb_unregister_extension_class(__godot_class_library, &className);
         }
 
         @section("__gde_startup")
-        pragma(mangle, "__gde_class_startup_"~classNameOf!T)
-        extern(C) GDClassStartupFunc __startup_func = cast(GDClassStartupFunc)&__gde_register;
+        pragma(mangle, gdeMangleOf!(T, __gde_class_startup))
+        extern(C) GDClassStartupFunc __gde_class_startup = cast(GDClassStartupFunc)&__gde_register;
     
         @section("__gde_shutdown")
-        pragma(mangle, "__gde_class_shutdown_"~classNameOf!T)
-        extern(C) GDClassCleanupFunc __shutdown_func = cast(GDClassCleanupFunc)&__gde_unregister;
+        pragma(mangle, gdeMangleOf!(T, __gde_class_shutdown))
+        extern(C) GDClassShutdownFunc __gde_class_shutdown = cast(GDClassShutdownFunc)&__gde_unregister;
     }
 }
 
@@ -702,7 +432,13 @@ template __nu_gde_instance_callbacks(T) {
     }
 }
 
-// Following is C functions that forward 
+
+
+
+// 
+// These functions implement forwarders for basic godot class functions  
+// They just forward calls to the GDEObject class type.
+// 
 
 extern(C) GDExtensionBool __gde_class_get_func(void* p_instance, StringName* p_name, Variant* p_variant) @nogc {
     return (cast(GDEObject)p_instance).get(*p_name, *p_variant);

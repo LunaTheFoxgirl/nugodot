@@ -1,8 +1,9 @@
-module godot.core.gdextension.lifetime;
-import godot.core.gdextension.iface;
-import godot.core.gdextension.object;
-import godot.variant.string;
-import numem.core.traits;
+module godot.core.lifetime;
+import godot.core.gdextension;
+import godot.core.object;
+import godot.core.traits;
+import godot.variant;
+
 import numem.core.math;
 import numem.lifetime;
 

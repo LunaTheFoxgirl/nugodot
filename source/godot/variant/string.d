@@ -3,7 +3,7 @@ import godot.core.gdextension.iface;
 import godot.core.gdextension.variant_size;
 import numem.core.memory;
 import numem.core.hooks;
-import nulib.string;
+import godot.variant.variant;
 
 /**
     A godot string.
@@ -27,6 +27,13 @@ public:
     /// Destructor
     ~this() {
         string_destroy(&this);
+    }
+
+    /**
+        Constructs a string from a variant.
+    */
+    this(ref Variant variant) {
+        string_from_variant(&this, &variant);
     }
 
     /**
@@ -72,7 +79,7 @@ public:
         Gets a string representation of the godot string.
 
         Note:
-            This string must be freed with nu_freea!
+            This string must be freed with $(D nu_freea)!
         
         Returns:
             A D string representation of this string.
@@ -85,20 +92,40 @@ public:
 }
 
 /**
-    Constructs a new heap allocated string.
+    Constructs a new heap allocated $(D String).
 
-    This string must be freed by your using $(D nogc_delete)!
+    This string must be freed by your using $(D gde_free_string)!
 
     Params:
         value = The value to set the new string to.
     
     Returns:
-        The newly constructed string.
+        The newly constructed $(D String).
+    
+    See_Also:
+        $(D gde_free_string)
 */
+pragma(inline, true)
 String* gde_make_string(string value) @nogc {
     String* result = cast(String*)nu_malloc(String.sizeof);
     string_new_with_utf8_chars_and_len2(result, value.ptr, cast(int)value.length);
     return result;
+}
+
+/**
+    Frees a heap-allocated $(D String).
+
+    Params:
+        str = The string to free.
+
+    See_Also:
+        $(D gde_make_string)
+*/
+pragma(inline, true)
+void gde_free_string(ref String* str) @nogc {
+    string_destroy(str);
+    nu_free(str);
+    str = null;
 }
 
 /**
@@ -122,11 +149,56 @@ public:
     }
 
     /**
+        Constructs a StringName from a variant.
+    */
+    this(ref Variant variant) {
+        string_name_from_variant(&this, &variant);
+    }
+
+    /**
         Constructs a new StringName.
     */
     this(string name) {
         string_name_new_with_utf8_chars_and_len(&this, name.ptr, cast(int)name.length);
     }
+}
+
+/**
+    Constructs a new heap allocated $(D StringName).
+
+    This string must be freed by your using $(D gde_free_string_name)!
+
+    Params:
+        value = The value to set the new string to.
+    
+    Returns:
+        The newly constructed $(D StringName).
+    
+    See_Also:
+        $(D gde_free_string_name)
+*/
+pragma(inline, true)
+StringName* gde_make_string_name(string value) @nogc {
+    StringName* result = cast(StringName*)nu_malloc(StringName.sizeof);
+    string_name_new_with_utf8_chars_and_len(result, value.ptr, cast(int)value.length);
+    return result;
+}
+
+
+/**
+    Frees a heap-allocated $(D StringName).
+
+    Params:
+        str = The string to free.
+
+    See_Also:
+        $(D gde_make_string_name)
+*/
+pragma(inline, true)
+void gde_free_string_name(ref StringName* name) @nogc {
+    string_name_destroy(name);
+    nu_free(name);
+    name = null;
 }
 
 /**
@@ -142,5 +214,12 @@ public:
     /// Destructor
     ~this() {
         node_path_destroy(&this);
+    }
+
+    /**
+        Constructs a StringName from a variant.
+    */
+    this(ref Variant variant) {
+        node_path_from_variant(&this, &variant);
     }
 }

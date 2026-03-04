@@ -1,6 +1,6 @@
 module godot.core.classdb;
-import godot.core.gdextension.iface;
-import godot.core.gdextension.object;
+import godot.core.gdextension;
+import godot.core.object;
 
 /**
     A class information repository.
