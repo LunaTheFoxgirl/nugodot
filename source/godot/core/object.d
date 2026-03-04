@@ -6,6 +6,7 @@ module godot.core.object;
 import godot.core.gdextension;
 import godot.core.lifetime;
 import godot.core.traits;
+import godot.core.wrap;
 import godot.core;
 import godot.variant.variant;
 import godot.variant.string;
@@ -40,14 +41,9 @@ private:
 protected:
 
     /**
-        Called by the implementation before initializing the type.
+        Called by the implementation when initializing the type.
     */
-    void onPreInitialize() { }
-
-    /**
-        Called by the implementation after initializing the type.
-    */
-    void onPostInitialize() { }
+    void onInitialize() { }
 
     /**
         Called when the object gets a notification.
@@ -63,7 +59,7 @@ public:
     /**
         Gets the underlying godot object pointer.
     */
-    final @property GDExtensionObjectPtr native_ptr() @system => nativePtr_;
+    final @property GDExtensionObjectPtr ptr() @system => nativePtr_;
 
     /**
         Sets the given property to the given value.
@@ -119,6 +115,25 @@ public:
         Gets a string representation of this type.
     */
     override string toString() { return typeid(this).name; }
+}
+
+/**
+    Calls a function by name and hash on this object instance.
+
+    This function is provided as an escape hatch if you need
+    to call a function not exposed by the API, it is *not*
+    optimal.
+
+    Params:
+        name = The name of the method to call.
+        hash = Hash of the method's signature.
+        args = Arguments to pass to the method.
+    
+    Returns:
+        The return value of the method called.
+*/
+RetT call(RetT = void, ClassT, Args...)(ClassT klass, string name, long hash, auto ref Args args) {
+    return gde_ptrcall!(RetT, Args)(klass.ptr, gde_get_method_bind!(ClassT)(name, hash), args);
 }
 
 /**

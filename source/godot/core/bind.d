@@ -31,6 +31,7 @@ if (is(T : GDEObject) && is(T PT == super)) {
     enum hasSetOverride = __traits(isOverrideFunction, T.set);
     enum hasCanRevertOverride = __traits(isOverrideFunction, T.canRevertProperty);
     enum hasGetPropertyRevertOverride = __traits(isOverrideFunction, T.getPropertyRevert);
+    enum hasNotificationOverride = __traits(isOverrideFunction, __traits(getMember, T, "onNotification"));
     
     static if (is(T PT == super)) {
         GDExtensionClassCreationInfo5 classInfo = GDExtensionClassCreationInfo5(
@@ -39,13 +40,14 @@ if (is(T : GDEObject) && is(T PT == super)) {
             is_exposed: true,
             is_runtime: true,
             icon_path: __gde_icon_path_ptr,
-            notification_func: cast(typeof(GDExtensionClassCreationInfo5.notification_func))&__gde_class_notification_func,
             to_string_func: cast(typeof(GDExtensionClassCreationInfo5.to_string_func))&__gde_class_to_string_func,
             create_instance_func: cast(typeof(GDExtensionClassCreationInfo5.create_instance_func))&ctors.__gde_class_create,
             free_instance_func: cast(typeof(GDExtensionClassCreationInfo5.free_instance_func))&ctors.__gde_class_free,
             recreate_instance_func: cast(typeof(GDExtensionClassCreationInfo5.recreate_instance_func))&ctors.__gde_class_recreate,
 
             // Optional overrides.
+            notification_func: 
+                hasNotificationOverride ? cast(typeof(GDExtensionClassCreationInfo5.notification_func))&__gde_class_notification_func : null,
             set_func:
                 hasGetOverride ? cast(typeof(GDExtensionClassCreationInfo5.set_func))&__gde_class_set_func : null,
             get_func:
@@ -78,6 +80,11 @@ if (is(T : GDEObject)) {
             StringName parentClassName = classNameOf!PT;
             void* pObject = classdb_construct_object2(&parentClassName);
             cast(void)gde_alloc_class!T(pObject);
+
+            if (p_postinit) {
+                auto p_bind = gde_get_method_bind("Object", "notification", GDEXTENSION_NOTIFICATION_FUNC_HASH);
+                gde_ptrcall(pObject, p_bind, 0, false);
+            }
             return pObject;
         }
 

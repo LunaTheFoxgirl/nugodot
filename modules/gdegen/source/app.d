@@ -163,5 +163,12 @@ void writeGDEInterface(JSONValue[2] jsonIn, string dir) {
             ));
         }
     }
+
+    // Write notification function hash
+    auto apiObjectClass = jsonIn[GDE_API].findAPIClass("Object");
+    auto apiNotificationFunc = apiObjectClass.findAPIMethod("notification");
+    target.writenls();
+    target.writefln("enum GDEXTENSION_NOTIFICATION_FUNC_HASH = %s;", apiNotificationFunc["hash"].integer);
+
     target.flush();
 }

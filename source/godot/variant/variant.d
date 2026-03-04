@@ -68,6 +68,11 @@ public:
     @property VariantType type() => cast(VariantType)variant_get_type(ptr);
 
     /**
+        The hash of this variant.
+    */
+    @property long hash() => variant_hash(&this);
+
+    /**
         The name of the type stored in the variant.
     */
     @property String typeName() {

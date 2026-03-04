@@ -147,3 +147,43 @@ GDEVariantType[] parseVariantTypes(JSONValue json, int schema) {
     registry.finalize();
     return cast(GDEVariantType[])registry.types().findTypes!GDEVariantType;
 }
+
+
+
+
+
+
+//
+//          LOOKUP UTILITIES
+//
+
+
+/**
+    Finds an a class from the API schema.
+
+    Params:
+        api =   The API schema
+        name =  Name of the class to find.
+*/
+JSONValue findAPIClass(JSONValue api, string name) {
+    foreach(klass; api["classes"].array) {
+        if (klass["name"].str == name)
+            return klass;
+    }
+    return JSONValue.init;
+}
+
+/**
+    Finds a method from an API Class.
+
+    Params:
+        apiClass =  Class from the API Schema
+        name =      Name of the method to find.
+*/
+JSONValue findAPIMethod(JSONValue apiClass, string name) {
+    foreach(method; apiClass["methods"].array) {
+        if (method["name"].str == name)
+            return method;
+    }
+    return JSONValue.init;
+}

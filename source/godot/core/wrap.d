@@ -63,6 +63,86 @@ GDClassShutdownFunc[] gde_get_class_shutdown_functions() @nogc nothrow {
 }
 
 /**
+    Gets a GDExtension MethodBindPtr for a given name and hash.
+
+    Params:
+        name =      Name of the binding to get.
+        hash =      Hash of the binding to get.
+    
+    Returns:
+        A method bind for the given name and hash on success,
+        $(D null) otherwise.
+*/
+GDExtensionMethodBindPtr gde_get_method_bind(ClassT)(string name, long hash) @nogc nothrow {
+    auto p_classname = gde_make_string_name(classNameOf!ClassT);
+    auto p_methodname = gde_make_string_name(name);
+    auto p_method = classdb_get_method_bind(p_classname, p_methodname, hash);
+    gde_free_string_name(p_classname);
+    gde_free_string_name(p_methodname);
+    return p_method;
+}
+
+/**
+    Gets a GDExtension MethodBindPtr for a given classname, name and hash.
+
+    Params:
+        className = Name of the class to get the method bind for.
+        name =      Name of the binding to get.
+        hash =      Hash of the binding to get.
+    
+    Returns:
+        A method bind for the given classname, name and hash on success,
+        $(D null) otherwise.
+*/
+GDExtensionMethodBindPtr gde_get_method_bind(string className, string name, long hash) @nogc nothrow {
+    auto p_classname = gde_make_string_name(className);
+    auto p_methodname = gde_make_string_name(name);
+    auto p_method = classdb_get_method_bind(p_classname, p_methodname, hash);
+    gde_free_string_name(p_classname);
+    gde_free_string_name(p_methodname);
+    return p_method;
+}
+
+/**
+    Calls a function on a given object object.
+
+    Params:
+        obj =       The object to call the method on.
+        method =    The method bind instance to call.
+        args =      The arguments to the function.
+
+    Returns:
+        The return value of the method bind
+*/
+RetT gde_ptrcall(RetT = void, Args...)(GDExtensionObjectPtr obj, GDExtensionMethodBindPtr method, auto ref Args args) @nogc nothrow @system {
+
+    // Fill out arguments
+    void*[Args.length] args_;
+    static foreach(arg; args) {
+        static if (is(typeof(arg) : GDEObject)) {
+            args_ = arg.ptr;
+        } else {
+            args_ = cast(void*)&arg;
+        }
+    }
+    
+    // Call
+    static if (!is(RetT == void)) {
+        static if (is(RetT : GDEObject)) {
+            GDExtensionObjectPtr objptr_;
+            object_method_bind_ptrcall(method, obj, args_.ptr, &objptr_);
+            return gde_get!RetT(objptr_);
+        } else {
+            RetT ret_;
+            object_method_bind_ptrcall(method, obj, args_.ptr, &ret_);
+            return ret_;
+        }
+    } else {
+        object_method_bind_ptrcall(method, obj, args_.ptr, null);
+    }
+}
+
+/**
     Gets an instance of the given function for the given type,
     while respecting virtual functions.
 
@@ -200,7 +280,7 @@ GDExtensionClassMethodCall gde_wrap_method_call(T, alias method)() @nogc {
         $(D gde_destroy_property_info)
 */
 pragma(inline, true)
-GDExtensionPropertyInfo gde_make_property_info(T)(string name, uint hint = 0, string hintString = null, uint usageFlags = 0) @nogc {
+GDExtensionPropertyInfo gde_make_property_info(T)(string name, uint hint = 0, string hintString = null, uint usageFlags = 6) @nogc {
     static if (is(T : GDEObject))
         string class_name = classNameOf!T;
     else
@@ -313,7 +393,7 @@ if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
         variant_from_string_name(&result, &value);
     } else static if (is(T : GDEObject)) {
 
-        variant_from_object(&result, value.native_ptr);
+        variant_from_object(&result, value.ptr);
     } else {
         static assert(0, "Wrapping of type "~T.stringof~" is not currently supported!");
     }
