@@ -106,6 +106,24 @@ GDETypeRegistry parseTypes(JSONValue json, int schema) {
             break;
         
         case GDE_API:
+            import std.parallelism : parallel;
+            foreach(type_t; parallel(json["classes"].array)) {
+                auto class_t = new GDEClass();
+                class_t.parse(type_t, GDE_API, registry);
+                registry.add(class_t);
+            }
+
+            foreach(type_t; parallel(json["global_constants"].array)) {
+                auto const_t = new GDEManifestConstant();
+                const_t.parse(type_t, GDE_API, registry);
+                registry.add(const_t);
+            }
+
+            foreach(type_t; parallel(json["global_enums"].array)) {
+                auto enum_t = new GDEEnum();
+                enum_t.parse(type_t, GDE_API, registry);
+                registry.add(enum_t);
+            }
             break;
     }
 

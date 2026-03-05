@@ -53,14 +53,42 @@ template variantTypeOf(T) {
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR3;
     else static if (is(T == Vector3i))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR3I;
+    else static if (is(T == Transform2D))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_TRANSFORM2D;
+    else static if (is(T == Vector4))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR4;
+    else static if (is(T == Vector4i))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_VECTOR4I;
+    else static if (is(T == Plane))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_PLANE;
+    else static if (is(T == Quaternion))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_QUATERNION;
     else static if (is(T == AABB))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_AABB;
+    else static if (is(T == Basis))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_BASIS;
+    else static if (is(T == Transform3D))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_TRANSFORM3D;
+    else static if (is(T == Projection))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_PROJECTION;
+    else static if (is(T == Color))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_COLOR;
     else static if (is(T == StringName))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_STRING_NAME;
     else static if (is(T == NodePath))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_NODE_PATH;
+    else static if (is(T == RID))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_RID;
     else static if (is(T : GDEObject))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_OBJECT;
+    else static if (is(T == Callable))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_CALLABLE;
+    else static if (is(T == Signal))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_SIGNAL;
+    else static if (is(T == Dictionary) || is(T == TypedDictionary!U, U))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_DICTIONARY;
+    else static if (is(T == Array) || is(T == TypedArray!U, U))
+        enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_ARRAY;
     else
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_NIL;
 }

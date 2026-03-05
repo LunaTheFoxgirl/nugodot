@@ -16,11 +16,11 @@ targetPath "out/"
 buildRequirements "silenceWarnings"
 
 configuration "build" {
-    targetType "sourceLibrary"
+    targetType "staticLibrary"
     preGenerateCommands "dub run :gdegen -- --dir=$PACKAGE_DIR"
 }
 
 configuration "rebuild" {
-    targetType "sourceLibrary"
-    preGenerateCommands "dub run :gdegen -- --force --dir=$PACKAGE_DIR"
+    targetType "staticLibrary"
+    preGenerateCommands "dub run :gdegen --build=release -- --force --dir=$PACKAGE_DIR"
 }

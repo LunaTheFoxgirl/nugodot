@@ -2,6 +2,7 @@ module generator.types;
 import generator.writer;
 import generator.utils;
 import generator.ddoc;
+import std.string;
 import std.json;
 
 enum INTERFACE_SCHEMA = 0;
@@ -32,6 +33,8 @@ static immutable BASIC_TYPE_NAMES = [
 final
 class GDETypeRegistry {
 private:
+    GDETypeRegistry superRegistry;
+
     GDEType[] types_;
     ptrdiff_t findIndexOf(string name, ptrdiff_t start = 0) {
         if (start >= types_.length)
@@ -58,6 +61,18 @@ public:
     }
 
     /**
+        Constructs this type registry as a sub-registry
+        of another.
+
+        Params:
+            superRegistry = The super registry.
+    */
+    this(GDETypeRegistry superRegistry) {
+        this();
+        this.superRegistry = superRegistry;
+    }
+
+    /**
         List of all registered types in the registry.
     */
     @property GDEType[] types() => types_;
@@ -70,6 +85,9 @@ public:
     */
     GDEType find(string name) {
         ptrdiff_t idx = this.findIndexOf(name);
+        if (superRegistry)
+            return idx >= 0 ? types_[idx] : superRegistry.find(name);
+
         return idx >= 0 ? types_[idx] : null;
     }
 
@@ -81,6 +99,9 @@ public:
     */
     GDEType findOrAssumeBasic(string name) {
         ptrdiff_t idx = this.findIndexOf(name);
+        if (superRegistry)
+            return idx >= 0 ? types_[idx] : superRegistry.findOrAssumeBasic(name);
+
         return idx >= 0 ? types_[idx] : this.basicType(name);
     }
 
@@ -94,6 +115,9 @@ public:
         ptrdiff_t idx = this.findIndexOf(name);
         if (idx >= 0)
             return types_[idx];
+
+        if (superRegistry)
+            return superRegistry.basicType(name);
         
         return this.add(new GDEBasicType(name));
     }
@@ -112,7 +136,9 @@ public:
             type =  The type added.
     */
     GDEType add(GDEType type) {
-        types_ ~= type;
+        synchronized {
+            types_ ~= type;
+        }
         return type;
     }
 
@@ -137,7 +163,7 @@ public:
         if (idx >= 0)
             return cast(T)types_[idx];
         
-        return new T(args);
+        return this.add(new T(args));
     }
 
     /**
@@ -145,8 +171,9 @@ public:
         within it realized.
     */
     void finalize() {
-        foreach(type; types_)
+        foreach(type; types_) {
             type.finalize(this);
+        }
     }
 }
 
@@ -176,6 +203,74 @@ protected:
     }
 
 public:
+
+    /**
+        Name as a D compatible identifier.
+    */
+    @property string d_name() => name;
+
+    /**
+        Name as a D compatible identifier, with subclassing.
+    */
+    @property string d_full_name() => d_name;
+
+    /**
+        Parses godot types.
+    */
+    static GDEType fromGodotType(string typeString, GDETypeRegistry registry) {
+        if (typeString.pop("enum::")) {
+            ptrdiff_t subclassLength = typeString.countUntil('.');
+            if (subclassLength > 0) {
+                string subclass = typeString[0..subclassLength];
+                string enumType = typeString[subclassLength+1..$];
+
+                if (auto klass = cast(GDEClass)registry.find(subclass)) {
+                    if (auto subtype = klass.findSubtype(enumType))
+                        return subtype;
+                }
+            }
+            if (auto rt = registry.find(typeString))
+                return rt;
+        }
+
+        if (typeString.pop("bitfield::")) {
+            ptrdiff_t subclassLength = typeString.countUntil('.');
+            if (subclassLength > 0) {
+                string subclass = typeString[0..subclassLength];
+                string enumType = typeString[subclassLength+1..$];
+
+                if (auto klass = cast(GDEClass)registry.find(subclass)) {
+                    if (auto subtype = klass.findSubtype(enumType))
+                        return subtype;
+                }
+            }
+            if (auto rt = registry.find(typeString))
+                return rt;
+        }
+
+        if (typeString.pop("typedarray::")) {
+            ptrdiff_t junk = typeString.countUntil(':');
+            if (junk >= 0)
+                typeString.skip(junk+1);
+
+            if (typeString.length == 0)
+                return registry.findOrAssumeBasic("Array");
+
+            return new GDETypedArray(registry.findOrAssumeBasic(typeString));
+        }
+
+        if (typeString.pop("typeddictionary::")) {
+            ptrdiff_t keyLength = typeString.countUntil(';');
+            string keyType = typeString[0..keyLength];
+            string valueType = typeString[keyLength+1..$];
+            return new GDETypedDictionary(registry.findOrAssumeBasic(keyType), registry.findOrAssumeBasic(valueType));
+        }
+
+        if (auto rt = registry.find(typeString))
+            return rt;
+        
+        return GDEType.fromCTypeString(typeString, registry);
+    }
 
     /**
         Parses a type from a C type string.
@@ -209,6 +304,8 @@ public:
                     type = registry.findOrAssumeBasic(iden);
                 continue;
             }
+
+            buffer.skip();
         }
         return type;
     }
@@ -302,6 +399,104 @@ public:
 }
 
 /**
+    A typed array.
+*/
+class GDETypedArray : GDEType {
+private:
+    GDEType type_;
+
+public:
+
+    /**
+        Name as a D compatible identifier.
+    */
+    override @property string d_name() => "TypedArray!("~type_.d_full_name~")";
+
+    /**
+        Name of the type of the member.
+    */
+    @property GDEType type() => type_;
+    
+    /**
+        Constructs a new typed array.
+    */
+    this(GDEType type) {
+        this.type_ = type;
+        this.name = "TypedArray[%s]".format(type_.name);
+    }
+
+    /**
+        Parses the type.
+    
+        Params:
+            json =      The JSON value to parse.
+            schema =    The schema being parsed.
+            registry =  The type registry.
+    */
+    override void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) { }
+
+    /**
+        Finalizes the type.
+
+        Params:
+            registry =  The type registry.
+    */
+    override void finalize(GDETypeRegistry registry) { }
+}
+/**
+    A typed dictionary.
+*/
+class GDETypedDictionary : GDEType {
+private:
+    GDEType keyType_;
+    GDEType valueType_;
+
+public:
+
+    /**
+        Name as a D compatible identifier.
+    */
+    override @property string d_name() => "TypedDictionary!("~keyType_.d_full_name~", "~valueType_.d_full_name~")";
+
+    /**
+        Name of the type of the member.
+    */
+    @property GDEType keyType() => keyType_;
+
+    /**
+        Name of the type of the member.
+    */
+    @property GDEType valueType() => valueType_;
+    
+    /**
+        Constructs a new typed array.
+    */
+    this(GDEType key, GDEType value) {
+        this.keyType_ = key;
+        this.valueType_ = value;
+        this.name = "TypedDictionary[%s;%s]".format(key.name, value.name);
+    }
+
+    /**
+        Parses the type.
+    
+        Params:
+            json =      The JSON value to parse.
+            schema =    The schema being parsed.
+            registry =  The type registry.
+    */
+    override void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) { }
+
+    /**
+        Finalizes the type.
+
+        Params:
+            registry =  The type registry.
+    */
+    override void finalize(GDETypeRegistry registry) { }
+}
+
+/**
     A named member of a type.
 */
 abstract
@@ -312,23 +507,6 @@ public:
         Name of the type of the member.
     */
     abstract @property GDEType type();
-
-    /**
-        Name of the value of the member.
-    */
-    abstract @property string value();
-
-    /**
-        Gets a string representation of the type.
-    */
-    override
-    string toString() { // @suppress(dscanner.suspicious.object_const)
-        import std.format;
-        
-        if (value)
-            return "%s %s = %s".format(type.toString(), name, value);
-        return "%s %s".format(type.toString(), name);
-    }
 }
 
 /**
@@ -494,14 +672,47 @@ public:
 */
 class GDEEnum : GDEAggregate {
 private:
+    GDEType type_;
+    GDEClass parent_;
     GDEMember[] members_;
+    bool isBitfield_;
 
 public:
+
+    @property GDEType type() => type_;
+
+    /**
+        Name of the property as a valid D identifier.
+    */
+    override @property string d_name() => this.name.filterReserved;
+
+    /**
+        Name of the property as a valid D identifier.
+    */
+    override @property string d_full_name() => parent ? "%s.%s".format(parent.d_name, this.d_name) : this.d_name;
 
     /**
         Members of the enum.
     */
     override @property GDEMember[] members() => members_;
+
+    /**
+        Whether the enum is a bitfield.
+    */
+    @property bool isBitfield() => isBitfield_;
+
+    /**
+        Parent class of the method.
+    */
+    @property GDEClass parent() => parent_;
+
+    /// base constructor
+    this() { }
+
+    /// class constructor
+    this(GDEClass parent) {
+        this.parent_ = parent;
+    }
 
     /**
         Parses the type.
@@ -515,17 +726,46 @@ public:
     void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) {
         switch(schema) {
             case INTERFACE_SCHEMA:
+            case API_SCHEMA:
                 this.name = json["name"].str;
                 foreach(mjson; json["values"].array) {
                     auto member = new GDEEnumMember(this);
                     member.parse(mjson, schema, registry);
                     this.members_ ~= member;
                 }
+
+                if ("is_bitfield" in json)
+                    this.isBitfield_ = json["is_bitfield"].boolean;
                 return;
 
             default:
                 return;
         }
+    }
+
+    /**
+        Finalizes the type.
+
+        Params:
+            registry =  The type registry.
+    */
+    override void finalize(GDETypeRegistry registry) {
+        import std.math : abs;
+        
+        long maxValue = 0;
+        foreach(member; cast(GDEEnumMember[])members) {
+            if (abs(member.value) > maxValue)
+                maxValue = abs(member.value);
+        }
+
+        if (maxValue >= int.max)
+            this.type_ = registry.basicType("int64_t");
+        else if (maxValue >= short.max)
+            this.type_ = registry.basicType("int32_t");
+        else if (maxValue >= byte.max)
+            this.type_ = registry.basicType("int16_t");
+        else 
+            this.type_ = registry.basicType("int8_t");
     }
 
     /**
@@ -545,7 +785,7 @@ class GDEEnumMember : GDEMember {
 private:
     GDEEnum parent_;
     GDEType type_;
-    string value_;
+    long value_;
 
 public:
 
@@ -557,7 +797,7 @@ public:
     /**
         Value of the type.
     */
-    override @property string value() => value_;
+    @property long value() => value_;
 
     /**
         The parent enum that this member belongs to.
@@ -588,9 +828,10 @@ public:
 
         switch(schema) {
             case INTERFACE_SCHEMA:
+            case API_SCHEMA:
                 this.name = json["name"].str;
                 if ("value" in json)
-                    this.value_ = json["value"].toString();
+                    this.value_ = json["value"].integer;
                 
                 return;
 
@@ -618,6 +859,67 @@ public:
         import std.format;
         return "%s = %s".format(name, value);
     }
+}
+
+/**
+    A manifest constant.
+*/
+class GDEManifestConstant : GDEType {
+private:
+    GDEClass parent_;
+    string name_;
+    long value_;
+
+public:
+
+    /// base constructor
+    this() { }
+
+    /// class constructor
+    this(GDEClass parent) {
+        this.parent_ = parent;
+    }
+
+    /**
+        Parent class of the method.
+    */
+    @property GDEClass parent() => parent_;
+
+    /**
+        Value of the manifest constant.
+    */
+    @property long value() => value_;
+
+    /**
+        Parses the type.
+    
+        Params:
+            json =      The JSON value to parse.
+            schema =    The schema being parsed.
+            registry =  The type registry.
+    */
+    override
+    void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) {
+        this.ddoc_ = parseDocs(json);
+        switch(schema) {
+            case API_SCHEMA:
+                this.name = json["name"].str;
+                this.value_ = json["value"].integer;
+                return;
+
+            default:
+                return;
+        }
+    }
+
+    /**
+        Finalizes the type.
+
+        Params:
+            registry =  The type registry.
+    */
+    override
+    void finalize(GDETypeRegistry registry) { }
 }
 
 /**
@@ -817,7 +1119,7 @@ public:
     /**
         Value of the type.
     */
-    override @property string value() => value_;
+    @property string value() => value_;
 
     /**
         Parses the type.
@@ -985,6 +1287,7 @@ public:
 
         switch(schema) {
             case INTERFACE_SCHEMA:
+            case API_SCHEMA:
                 this.name = json["name"].str;
 
                 if ("arguments" in json) {
@@ -1011,10 +1314,11 @@ public:
     */
     override
     void finalize(GDETypeRegistry registry) {
-        foreach(param; params_)
+        foreach(param; params_) {
             param.finalize(registry);
+        }
         
-        return_ = rTypeName_ ? GDEType.fromCTypeString(rTypeName_, registry) : registry.basicType("void");
+        return_ = rTypeName_ ? GDEType.fromGodotType(rTypeName_, registry) : registry.basicType("void");
     }
 
     /**
@@ -1036,6 +1340,7 @@ private:
     string typeName_;
     GDEType type_;
     string value_;
+    string meta_;
 
 public:
 
@@ -1047,7 +1352,12 @@ public:
     /**
         Default value of the parameter, can be empty.
     */
-    override @property string value() => value_;
+    @property string value() => value_;
+
+    /**
+        Meta-type of parameter.
+    */
+    @property string meta() => meta_;
 
     /**
         Constructor.
@@ -1074,8 +1384,9 @@ public:
     void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) {
         switch(schema) {
             case INTERFACE_SCHEMA:
+            case API_SCHEMA:
                 if ("name" in json)
-                    this.name = json["name"].str;
+                    this.name = json["name"].str.filterReserved();
                 
                 if ("type" in json)
                     this.typeName_ = json["type"].str;
@@ -1102,6 +1413,485 @@ public:
             return;
         }
 
-        this.type_ = GDEType.fromCTypeString(typeName_, registry);
+        this.type_ = GDEType.fromGodotType(typeName_, registry);
+    }
+}
+
+/**
+    A class method.
+*/
+class GDEMethod : GDEFunc {
+private:
+    GDEClass parent_;
+    bool isProtected_;
+    bool isConst_;
+    bool isStatic_;
+    bool isRequired_;
+    bool isVararg_;
+    bool isVirtual_;
+    long hash_;
+
+public:
+
+    /**
+        Name of the property as a valid D identifier.
+    */
+    override @property string d_name() => isProtected_ ?
+        this.name.toCamelCase.filterReserved ~ "Impl" :
+        this.name.toCamelCase.filterReserved;
+
+    /**
+        Whether the method is const.
+    */
+    @property bool isConst() => isConst_;
+
+    /**
+        Whether the method is static.
+    */
+    @property bool isStatic() => isStatic_;
+
+    /**
+        Whether the method is required.
+    */
+    @property bool isRequired() => isRequired_;
+
+    /**
+        Whether the method is vararg.
+    */
+    @property bool isVararg() => isVararg_;
+
+    /**
+        Whether the method is virtual.
+    */
+    @property bool isVirtual() => isVirtual_;
+
+    /**
+        Whether the method is protected.
+    */
+    @property bool isProtected() => isProtected_;
+
+    /**
+        Whether this method is an override.
+    */
+    @property bool isOverride() => parent_.inherits ? parent_.inherits.hasMethod(d_name) : false;
+
+    /**
+        The hash of the method.
+    */
+    @property long hash() => hash_;
+
+    /**
+        Parent class of the method.
+    */
+    @property GDEClass parent() => parent_;
+
+    /**
+        Instantiates a new method.
+    */
+    this(GDEClass parent) {
+        this.parent_ = parent;
+    }
+
+    /**
+        Parses the type.
+    
+        Params:
+            json =      The JSON value to parse.
+            schema =    The schema being parsed.
+            registry =  The type registry.
+    */
+    override
+    void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) {
+        this.ddoc_ = parseDocs(json);
+
+        switch(schema) {
+            case API_SCHEMA:
+            case INTERFACE_SCHEMA:
+                super.parse(json, schema, registry);
+                this.isConst_ = json["is_const"].boolean;
+                this.isStatic_ = json["is_static"].boolean;
+                this.isRequired_ = "is_required" in json && json["is_required"].boolean;
+                this.isVararg_ = json["is_vararg"].boolean;
+                this.isVirtual_ = json["is_virtual"].boolean;
+                this.hash_ = json["hash"].integer;
+                this.isProtected_ = json["name"].str[0] == '_';
+                return;
+
+            default:
+                return;
+        }
+    }
+
+    /**
+        Finalizes the type.
+
+        Params:
+            registry =  The type registry.
+    */
+    override
+    void finalize(GDETypeRegistry registry) {
+        super.finalize(registry);
+
+        if (return_)
+            this.parent_.use(return_);
+
+        foreach(param; params_)
+            this.parent_.use(param.type);
+    }
+}
+
+/**
+    A signal.
+*/
+class GDESignal : GDEFunc {
+private:
+
+public:
+
+}
+
+/**
+    A class property
+*/
+class GDEProperty : GDEMember {
+private:
+    GDEClass parent_;
+
+    string typeName_;
+    GDEType type_;
+
+    string getterName_;
+    GDEMethod getter_;
+
+    string setterName_;
+    GDEMethod setter_;
+
+    long index_ = -1;
+
+public:
+
+    /**
+        Name of the property as a valid D identifier.
+    */
+    override @property string d_name() => this.name.toCamelCase.filterReserved;
+
+    /**
+        Parent class of the method.
+    */
+    @property GDEClass parent() => parent_;
+
+    /**
+        Type of the property.
+    */
+    override @property GDEType type() => type_;
+
+    /**
+        Getter of the property.
+    */
+    @property GDEMethod getter() => getter_;
+
+    /**
+        Setter of the property.
+    */
+    @property GDEMethod setter() => setter_;
+
+    /**
+        Index for getter and setter, or $(D -1).
+    */
+    @property long index() => index_;
+
+    /**
+        Instantiates a new property.
+    */
+    this(GDEClass parent) {
+        this.parent_ = parent;
+    }
+
+    /**
+        Parses the type.
+    
+        Params:
+            json =      The JSON value to parse.
+            schema =    The schema being parsed.
+            registry =  The type registry.
+    */
+    override
+    void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) {
+        this.ddoc_ = parseDocs(json);
+
+        switch(schema) {
+            case API_SCHEMA:
+                super.name = json["name"].str;
+                this.typeName_ = json["type"].str;
+
+                if ("getter" in json)
+                    this.getterName_ = json["getter"].str;
+
+                if ("setter" in json)
+                    this.setterName_ = json["setter"].str;
+
+                if ("index" in json)
+                    this.index_ = json["index"].integer;
+
+                return;
+
+            default:
+                return;
+        }
+    }
+
+    /**
+        Finalizes the type.
+
+        Params:
+            registry =  The type registry.
+    */
+    override
+    void finalize(GDETypeRegistry registry) {
+        this.type_ = GDEType.fromGodotType(typeName_, registry);
+        this.parent_.use(type_);
+
+        this.getter_ = cast(GDEMethod)registry.find(getterName_);
+        this.setter_ = cast(GDEMethod)registry.find(setterName_);   
+    }
+}
+
+/**
+    A class.
+*/
+class GDEClass : GDEAggregate {
+private:
+    string inheritsName_;
+    GDEClass inherits_;
+
+    GDETypeRegistry subregistry;
+
+    string apiType_;
+    bool isInstantiable_;
+    GDEManifestConstant[] constants_;
+    GDEEnum[] enums_;
+    GDEMethod[] methods_;
+    GDESignal[] signals_;
+    GDEProperty[] properties_;
+    GDEType[] used_;
+
+public:
+    override @property GDEMember[] members() => [];
+
+    /**
+        D name of the class
+    */
+    override @property string d_name() => name.filterReserved();
+
+    /**
+        Types used by this class.
+    */
+    @property GDEType[] used() => used_;
+
+    /**
+        The class this class inherits.
+    */
+    @property GDEClass inherits() => inherits_;
+    
+    /**
+        The constants of the class
+    */
+    @property ref GDEManifestConstant[] constants() => constants_;
+    
+    /**
+        The enums of the class
+    */
+    @property ref GDEEnum[] enums() => enums_;
+    
+    /**
+        The methods of the class
+    */
+    @property ref GDEMethod[] methods() => methods_;
+    
+    /**
+        The signals of the class
+    */
+    @property ref GDESignal[] signals() => signals_;
+    
+    /**
+        The properties of the class
+    */
+    @property ref GDEProperty[] properties() => properties_;
+
+    /**
+        Whether the class can be instantiated.
+    */
+    @property ref bool isInstantiable() => isInstantiable_;
+
+    /**
+        The API Type.
+    */
+    @property string apiType() => apiType_;
+
+    /**
+        Constructor.
+    */
+    this() { }
+
+    /**
+        Constructor.
+    */
+    this(string name, GDEClass inherits, GDETypeRegistry registry) {
+        this.subregistry = new GDETypeRegistry(registry);
+        this.name = name;
+        this.inherits_ = inherits;
+    }
+
+    /**
+        Marks a type as used by this type.
+    */
+    void use(GDEType type) {
+        if (type is this)
+            return;
+
+        if (auto class_t = cast(GDEClass)type) {
+            foreach(u; used_)
+                if (u == type)
+                    return;
+            
+            used_ ~= type;
+        } else if (auto enum_t = cast(GDEEnum)type) {
+            if (enum_t.parent) {
+                this.use(enum_t.parent);
+            }
+        } else if (auto const_t = cast(GDEManifestConstant)type) {
+            if (const_t.parent) {
+                this.use(const_t.parent);
+            }
+        } else if (auto typedarray_t = cast(GDETypedArray)type) {
+            this.use(typedarray_t.type);
+        }
+    }
+
+    /**
+        Gets whether this class or any super class has a method
+        with the given name.
+
+        Params:
+            named = The D name of the method.
+
+        Returns:
+            $(D true) if the type hirearchy has a method with
+            thie given name, $(D false) otherwise. 
+    */
+    bool hasMethod(string named) {
+        foreach(method; methods_) {
+            if (method.d_name == named)
+                return true;
+        }
+        return inherits ? inherits.hasMethod(named) : false;
+    }
+
+    /**
+        Finds a subtype within this class.
+
+        Params:
+            named = The name of the type to find.
+        
+        Returns:
+            The type on success,
+            $(D null) otherwise.
+    */
+    GDEType findSubtype(string named) {
+        foreach(enum_t; enums) {
+            if (enum_t.name == named)
+                return enum_t;
+        }
+        return null;
+    }
+
+    /**
+        Parses the type.
+    
+        Params:
+            json =      The JSON value to parse.
+            schema =    The schema being parsed.
+            registry =  The type registry.
+    */
+    override
+    void parse(ref JSONValue json, int schema, ref GDETypeRegistry registry) {
+        this.ddoc_ = parseDocs(json);
+        this.subregistry = new GDETypeRegistry(registry);
+        
+        switch(schema) {
+            case API_SCHEMA:
+                this.name = json["name"].str;
+
+                this.isInstantiable_ = json["is_instantiable"].boolean;
+                this.apiType_ = json["api_type"].str;
+                
+                if ("inherits" in json)
+                    this.inheritsName_ = json["inherits"].str;
+                
+                if ("constants" in json) {
+                    foreach(const_t; json["constants"].array) {
+                        auto const_ = new GDEManifestConstant(this);
+                        const_.parse(const_t, schema, registry);
+                        constants_ ~= const_;
+
+                        subregistry.add(const_);
+                    }
+                }
+                
+                if ("enums" in json) {
+                    foreach(enum_t; json["enums"].array) {
+                        auto enum_ = new GDEEnum(this);
+                        enum_.parse(enum_t, schema, registry);
+                        enums_ ~= enum_;
+
+                        subregistry.add(enum_);
+                    }
+                }
+                
+                if ("methods" in json) {
+                    foreach(method_t; json["methods"].array) {
+                        auto method_ = new GDEMethod(this);
+                        method_.parse(method_t, schema, registry);
+                        methods_ ~= method_;
+
+                        subregistry.add(method_);
+                    }
+                }
+                
+                if ("properties" in json) {
+                    foreach(prop_t; json["properties"].array) {
+                        auto prop_ = new GDEProperty(this);
+                        prop_.parse(prop_t, schema, registry);
+                        properties_ ~= prop_;
+
+                        subregistry.add(prop_);
+                    }
+                }
+                
+                if ("signals" in json) {
+                    foreach(signal_t; json["signals"].array) {
+                        auto signal_ = new GDESignal();
+                        signal_.parse(signal_t, schema, registry);
+                        signals_ ~= signal_;
+                    }
+                }
+                return;
+
+            default:
+                return;
+        }
+    }
+
+    /**
+        Finalizes the type.
+
+        Params:
+            registry =  The type registry.
+    */
+    override
+    void finalize(GDETypeRegistry registry) {
+        this.inherits_ = cast(GDEClass)registry.find(inheritsName_);
+        this.use(inherits_);
+        subregistry.finalize();
     }
 }

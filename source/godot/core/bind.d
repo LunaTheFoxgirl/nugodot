@@ -14,8 +14,8 @@ import numem : nogc_new, nogc_delete;
 
     You generally do not need to call this yourself.
 */
-void gde_bind_class(T)() @nogc 
-if (is(T : GDEObject) && is(T PT == super)) {
+extern(C) void gde_bind_class(T)() @nogc 
+if (is(T : GDEObject)) {
 
     // Get icon of the class
     static if (getClassIconPath!T !is null) {
@@ -24,6 +24,7 @@ if (is(T : GDEObject) && is(T PT == super)) {
     } else {
         String* __gde_icon_path_ptr = null;
     }
+
 
     alias ctors = gdeClassCtors!T;
 
@@ -59,16 +60,23 @@ if (is(T : GDEObject) && is(T PT == super)) {
         );
 
         // Register class
-        StringName className = classNameOf!T;
-        StringName pClassName = classNameOf!PT;
-        classdb_register_extension_class5(__godot_class_library, &className, &pClassName, &classInfo);
-
-        // Bind members.
+        gde_register_extension_class(classNameOf!T, classNameOf!PT, classInfo);
         static foreach(member; boundMembersOf!T) {
             gde_bind_member!(T, member)();
         }
     }
 }
+
+void gde_unbind_class(T)() @nogc {
+    gde_unregister_extension_class(classNameOf!T);
+}
+
+
+
+//
+//                  IMPLEMENTATION DETAILS
+//
+private:
 
 template gdeClassCtors(T) 
 if (is(T : GDEObject)) {
@@ -76,7 +84,7 @@ if (is(T : GDEObject)) {
 
         // Instance constructor forwarder.
         pragma(mangle, gdeMangleOf!(T, __gde_class_create))
-        extern(C) static GDExtensionObjectPtr __gde_class_create(void* p_userdata, GDExtensionBool p_postinit) @nogc {
+        extern(C) __gshared GDExtensionObjectPtr __gde_class_create(void* p_userdata, GDExtensionBool p_postinit) @nogc {
             StringName parentClassName = classNameOf!PT;
             void* pObject = classdb_construct_object2(&parentClassName);
             cast(void)gde_alloc_class!T(pObject);
@@ -90,27 +98,19 @@ if (is(T : GDEObject)) {
 
         // Instance free forwarder.
         pragma(mangle, gdeMangleOf!(T, __gde_class_free))
-        extern(C) static void __gde_class_free(void* p_userdata, GDExtensionClassInstancePtr p_instance) @nogc {
-            GDEObject pObject = cast(GDEObject)p_instance;
-            nogc_delete(pObject);
+        extern(C) __gshared void __gde_class_free(void* p_userdata, GDExtensionClassInstancePtr p_instance) @nogc {
+            if (GDEObject pObject = cast(GDEObject)p_instance)
+                nogc_delete(pObject);
         }
 
         // Instance recreate forwarder.
         pragma(mangle, gdeMangleOf!(T, __gde_class_recreate))
-        extern(C) static GDExtensionClassInstancePtr __gde_class_recreate(void* p_userdata, GDExtensionObjectPtr p_object) @nogc {
+        extern(C) __gshared GDExtensionClassInstancePtr __gde_class_recreate(void* p_userdata, GDExtensionObjectPtr p_object) @nogc {
             return cast(GDExtensionClassInstancePtr)gde_alloc_class!T(p_object);
         }
     }
 }
 
-
-
-//
-//                  IMPLEMENTATION DETAILS
-//
-private:
-
-pragma(inline, true)
 void gde_bind_member(T, alias member)() @nogc
 if (is(T : GDEObject)) {
     static if (isPropertyFunc!(T, member)) {
@@ -122,15 +122,15 @@ if (is(T : GDEObject)) {
     }
 }
 
-pragma(inline, true)
-void gde_bind_method(T, alias method)(string name = null) @nogc {
-    import numem.core.traits : ReturnType, Parameters;
-
-    enum paramCount = Parameters!method.length;
+void gde_bind_method(T, alias method)(string name = null) @nogc
+if (is(T : GDEObject)) {
+    enum paramCount = parametersOf!(method).length;
     enum methodName = toSnakeCase!(__traits(identifier, method));
+    string method_name = name ? name : methodName;
+    string class_name = classNameOf!T;
 
-    StringName p_classname = StringName(classNameOf!T);
-    StringName p_methodname = StringName(name ? name : methodName);
+    StringName p_classname = StringName(class_name);
+    StringName p_methodname = StringName(method_name);
     GDExtensionClassMethodArgumentMetadata[paramCount] p_param_metas;
     GDExtensionPropertyInfo[paramCount] p_params;
     GDExtensionClassMethodArgumentMetadata p_return_meta;
@@ -139,15 +139,15 @@ void gde_bind_method(T, alias method)(string name = null) @nogc {
         cast(GDExtensionClassMethodFlags)methodFlagsOf!(method);
 
     // Fill out parameters.
-    static foreach(i, param; Parameters!method) {
+    static foreach(i, param; parametersOf!method) {
         static if (is(__traits(identifier, param))) {
             p_params[i] = gde_make_property_info!(param)(__traits(identifier, param));
         } else {
-            p_params[i] = gde_make_property_info!(param)("_param_"~(cast(int)i).stringof);
+            p_params[i] = gde_make_property_info!(param)("param"~(cast(int)i).stringof);
         }
     }
 
-    static if (!is(ReturnType!method == void))
+    static if (!is(returnTypeOf!method == void))
         p_return = gde_make_property_info!(ReturnType!method)("");
 
     // Registration
@@ -155,7 +155,7 @@ void gde_bind_method(T, alias method)(string name = null) @nogc {
         name: &p_methodname,
         call_func: gde_wrap_method_call!(T, method)(),
         ptrcall_func: gde_wrap_method_ptrcall!(T, method)(),
-        method_flags: p_methodflags,
+        method_flags: cast(uint)p_methodflags,
         has_return_value: !is(ReturnType!method == void),
         return_value_info: &p_return,
         return_value_metadata: p_return_meta,
@@ -163,6 +163,8 @@ void gde_bind_method(T, alias method)(string name = null) @nogc {
         arguments_info: p_params.ptr,
         arguments_metadata: p_param_metas.ptr,
     );
+    import core.stdc.stdio : printf;
+    printf("%s.%s: %u\n", class_name.ptr, method_name.ptr, p_methodinfo.default_argument_count);
     classdb_register_extension_class_method(__godot_class_library, &p_classname, &p_methodinfo);
 
     // Clean up parameters.
@@ -170,7 +172,6 @@ void gde_bind_method(T, alias method)(string name = null) @nogc {
         gde_destroy_property_info(p_params[i]);
 }
 
-pragma(inline, true)
 void gde_bind_property(T, alias memberName)() @nogc {
     StringName p_classname = StringName(classNameOf!T);
     enum gdMemberName = toSnakeCase!(memberName);

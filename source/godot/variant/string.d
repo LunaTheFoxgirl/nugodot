@@ -165,10 +165,12 @@ String* gde_make_string(string value) @nogc nothrow {
         $(D gde_make_string)
 */
 pragma(inline, true)
-void gde_free_string(ref String* str) @nogc nothrow {
-    string_destroy(str);
-    nu_free(str);
-    str = null;
+void gde_free_string()(auto ref String* str) @nogc nothrow {
+    if (str) {
+        string_destroy(str);
+        nu_free(str);
+        str = null;
+    }
 }
 
 /**
@@ -233,10 +235,12 @@ StringName* gde_make_string_name(string value) @nogc nothrow {
         $(D gde_make_string_name)
 */
 pragma(inline, true)
-void gde_free_string_name(ref StringName* name) @nogc nothrow {
-    string_name_destroy(name);
-    nu_free(name);
-    name = null;
+void gde_free_string_name()(auto ref StringName* name) @nogc nothrow {
+    if (name) {
+        string_name_destroy(name);
+        nu_free(name);
+        name = null;
+    }
 }
 
 /**

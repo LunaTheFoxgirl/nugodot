@@ -100,45 +100,68 @@ struct DDOCParam {
 */
 DDOC parseDocs(ref JSONValue gde) {
     DDOC result;
-    if (gde.isGDEInterfaceDocSchema()) {
-        
-        // General description.
-        if ("description" in gde) {
-            foreach(line; gde["description"].array)
-                result.description ~= line.str ~ "\n";
-        }
-        
-        // Arguments.
-        if ("arguments" in gde) {
-            foreach(arg; gde["arguments"].array) {
-                if ("description" in arg && "name" in arg) {
-                    DDOCParam param;
-                    param.name = arg["name"].str;
 
-                    foreach(line; arg["description"].array)
-                        param.description ~= line.str ~ "\n";
-                    
-                    result.parameters ~= param;
-                }
+    // General description.
+    if ("description" in gde) {
+        result.description = gde["description"].parseMultiline();
+    }
+    
+    // Arguments.
+    if ("arguments" in gde) {
+        foreach(arg; gde["arguments"].array) {
+            if ("description" in arg && "name" in arg) {
+                DDOCParam param;
+                param.name = arg["name"].str;
+
+                param.description = arg["description"].parseMultiline(); 
+                result.parameters ~= param;
             }
         }
-        
-        // Return values.
-        if ("return_value" in gde && "description" in gde["return_value"]) {
-            foreach(line; gde["return_value"]["description"].array)
-                result.return_ ~= line.str ~ "\n";
-        }
-        return result;
     }
-
-    // API Schema.
-    if ("description" in gde) {
-        result.description = gde["description"].toString();
+    
+    // Return values.
+    if ("return_value" in gde && "description" in gde["return_value"]) {
+        result.return_ = gde["return_value"]["description"].parseMultiline(); 
     }
     return result;
 }
 
 private:
+
+string parseMultiline(ref JSONValue strOrArray) {
+    if (strOrArray.type == JSONType.array) {
+        
+        string result;
+        foreach(line; strOrArray.array)
+            result ~= line.str ~ "\n";
+        return result.escapeDDOC();
+    } else if (strOrArray.type == JSONType.string) {
+        return strOrArray.str.escapeDDOC();
+    } else {
+        return "";
+    }
+}
+
+string escapeDDOC(string in_) {
+    string result;
+
+    size_t i = 0;
+    while (i < in_.length) {
+        char c = in_[i];
+        char cn = i+1 < in_.length ? in_[i+1] : '\0';
+        if (c == '*' && cn == '/') {
+            result ~= "*\\/";
+
+            i += 2;
+            continue;
+        }
+
+        result ~= c;
+        i++;
+    }
+
+    return result;
+}
 
 bool isGDEInterfaceDocSchema(ref JSONValue gde) {
     return 

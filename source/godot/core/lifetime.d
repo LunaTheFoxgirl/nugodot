@@ -16,7 +16,7 @@ import numem.lifetime;
     Returns:
         A new object of the given type.
 */
-Ref!T gd_new(T, Args...)(Args args) @safe @nogc {
+Ref!T gd_new(T, Args...)(Args args) @trusted @nogc {
     static if (is(T : GDEObject)) {
         static if (isGodotNativeClass!T) {
 
@@ -39,7 +39,7 @@ Ref!T gd_new(T, Args...)(Args args) @safe @nogc {
             static assert(0, "No super class was found for the type?!");
         }
     } else {
-        Ref!T mem = cast(Ref!T)mem_alloc2(AllocSize!T, true);
+        Ref!T mem = cast(Ref!T)nu_malloc(AllocSize!T, true);
         nogc_construct(mem, args);
         return mem;
     }
@@ -75,7 +75,7 @@ void gd_delete(T)(ref Ref!T value) @safe @nogc {
         The wrapped object, either fetched directly from the object
         or wrapped on the spot if no bindings were found.
 */
-T gde_get(T)(GDExtensionObjectPtr ptr) @safe @nogc
+T gde_get(T)(GDExtensionObjectPtr ptr) @trusted @nogc
 if (is(T : GDEObject)) {
 
     // Object already has a binding, return it.

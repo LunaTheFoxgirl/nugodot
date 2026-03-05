@@ -17,6 +17,7 @@ gde.lock
 source/godot/*
 !source/godot/core/
 !source/godot/variant/
+!source/godot/native/
 !source/godot/package.d
 source/godot/core/gdextension/iface.d
 source/godot/core/gdextension/variant_size.d

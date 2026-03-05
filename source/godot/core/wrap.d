@@ -7,29 +7,32 @@ import godot.core.object;
 import godot.core.traits;
 import godot.variant;
 import numem.core.hooks;
+import numem.core.lifetime;
 
 
 /**
     Godot class startup function type.
 */
-alias GDClassStartupFunc = extern(C) void function() @nogc nothrow;
+alias GDClassStartupFunc = void function() @nogc nothrow;
 
 /**
     Godot class shutdown function type.
 */
-alias GDClassShutdownFunc = extern(C) void function() @nogc nothrow;
+alias GDClassShutdownFunc = void function() @nogc nothrow;
 
 private {
+    import ldc.attributes;
+
     // NOTE:    These are linker sections for startup and shutdown
     //          functions.
     //          LLVM will insert these symbols automatically at the
     //          start and end of user set variables at these symbols.
 
-    extern(C) extern GDClassStartupFunc __start___gde_startup;
-    extern(C) extern GDClassStartupFunc __stop___gde_startup;
+    export extern(C) extern GDClassStartupFunc __start___gde_startup;
+    export extern(C) extern GDClassStartupFunc __stop___gde_startup;
 
-    extern(C) extern GDClassShutdownFunc __start___gde_shutdown;
-    extern(C) extern GDClassShutdownFunc __stop___gde_shutdown;
+    export extern(C) extern GDClassShutdownFunc __start___gde_shutdown;
+    export extern(C) extern GDClassShutdownFunc __stop___gde_shutdown;
 }
 
 /**
@@ -104,6 +107,31 @@ GDExtensionMethodBindPtr gde_get_method_bind(string className, string name, long
 }
 
 /**
+    Registers an extension class by name, parent class name and creation info.
+
+    Params:
+        className =         Name of the class to register
+        parentClassName =   Name of the parent class to register.
+        info =              Information to register.
+*/
+void gde_register_extension_class(string className, string parentClassName, ref GDExtensionClassCreationInfo5 info) @nogc {
+    StringName p_classname = className;
+    StringName p_parent_classname = parentClassName;
+    classdb_register_extension_class5(__godot_class_library, &p_classname, &p_parent_classname, &info);
+}
+
+/**
+    Unregisters an extension class.
+    
+    Params:
+        className = The name of the extension class to unregister.
+*/
+void gde_unregister_extension_class(string className) @nogc {
+    StringName p_classname = className;
+    classdb_unregister_extension_class(__godot_class_library, &p_classname);
+}
+
+/**
     Calls a function on a given object object.
 
     Params:
@@ -114,7 +142,7 @@ GDExtensionMethodBindPtr gde_get_method_bind(string className, string name, long
     Returns:
         The return value of the method bind
 */
-RetT gde_ptrcall(RetT = void, Args...)(GDExtensionObjectPtr obj, GDExtensionMethodBindPtr method, auto ref Args args) @nogc nothrow @system {
+RetT gde_ptrcall(RetT = void, Args...)(GDExtensionObjectPtr obj, GDExtensionMethodBindPtr method, auto ref Args args) @nogc @system {
 
     // Fill out arguments
     void*[Args.length] args_;
@@ -129,6 +157,8 @@ RetT gde_ptrcall(RetT = void, Args...)(GDExtensionObjectPtr obj, GDExtensionMeth
     // Call
     static if (!is(RetT == void)) {
         static if (is(RetT : GDEObject)) {
+            import godot.core.lifetime : gde_get;
+            
             GDExtensionObjectPtr objptr_;
             object_method_bind_ptrcall(method, obj, args_.ptr, &objptr_);
             return gde_get!RetT(objptr_);
@@ -286,15 +316,9 @@ GDExtensionPropertyInfo gde_make_property_info(T)(string name, uint hint = 0, st
     else
         string class_name;
 
-    StringName* p_name = cast(StringName*)nu_malloc(StringName.sizeof);
-    string_name_new_with_utf8_chars_and_len(p_name, name.ptr, cast(int)name.length);
-    
-    StringName* p_classname = cast(StringName*)nu_malloc(StringName.sizeof);
-    string_name_new_with_utf8_chars_and_len(p_classname, class_name.ptr, cast(int)class_name.length);
-
-    String* p_hint_string = cast(String*)nu_malloc(String.sizeof);
-    string_new_with_utf8_chars_and_len2(p_hint_string, hintString.ptr, cast(int)hintString.length);
-
+    StringName* p_name = gde_make_string_name(name);
+    StringName* p_classname = gde_make_string_name(class_name);
+    String* p_hint_string = gde_make_string(hintString);
     return GDExtensionPropertyInfo(
         type: variantTypeOf!T,
         name: p_name,
@@ -316,23 +340,9 @@ GDExtensionPropertyInfo gde_make_property_info(T)(string name, uint hint = 0, st
 */
 pragma(inline, true)
 void gde_destroy_property_info(ref GDExtensionPropertyInfo info) @nogc {
-    if (info.name) {
-        string_name_destroy(info.name);
-        nu_free(info.name);
-        info.name = null;
-    }
-
-    if (info.class_name) {
-        string_name_destroy(info.class_name);
-        nu_free(info.class_name);
-        info.class_name = null;
-    }
-
-    if (info.hint_string) {
-        string_destroy(info.hint_string);
-        nu_free(info.hint_string);
-        info.hint_string = null;
-    }
+    gde_free_string_name(cast(StringName*)info.name);
+    gde_free_string_name(cast(StringName*)info.class_name);
+    gde_free_string(cast(String*)info.hint_string);
 }
 
 /**
@@ -391,6 +401,9 @@ if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
     } else static if (is(T == StringName)) {
         
         variant_from_string_name(&result, &value);
+    } else static if (is(T == RID)) {
+        
+        variant_from_rid(&result, &value);
     } else static if (is(T : GDEObject)) {
 
         variant_from_object(&result, value.ptr);
@@ -456,6 +469,9 @@ if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
     } else static if (is(T == string)) {
         
         result = String(from).toString();
+    } else static if (is(T == RID)) {
+        
+        rid_from_variant(&result, &from);
     } else static if (is(T : GDEObject)) {
         GDExtensionObjectPtr _tmp;
         object_from_variant(&_tmp, &from);
@@ -465,10 +481,3 @@ if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
     }
     return result;
 }
-
-
-
-//
-//              IMPLEMENTATION DETAILS
-//
-private:

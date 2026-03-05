@@ -51,6 +51,13 @@ public:
     }
 }
 
+enum Axis {
+    AXIS_X = 0,
+    AXIS_Y = 1,
+    AXIS_Z = 2,
+    AXIS_W = 3
+}
+
 alias Vector2 = VectorImpl!(gd_float, 2);
 alias Vector2i = VectorImpl!(int, 2);
 alias Vector3 = VectorImpl!(gd_float, 3);

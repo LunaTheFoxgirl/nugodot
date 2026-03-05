@@ -56,9 +56,12 @@ private:
     }
 
     bool wasGraphical() {
-        import std.uni : byCodePoint, isSymbol, isAlpha, isAlphaNum;
-        foreach(p; lastLine.byCodePoint()) {
-            if (isSymbol(p) || isAlpha(p) || isAlphaNum(p))
+        import std.ascii : isAlphaNum, isPunctuation;
+        foreach(p; lastLine) {
+            if (p == '*' || p == '/')
+                continue;
+
+            if (isAlphaNum(p) || isPunctuation(p))
                 return true;
         }
         return false;
@@ -259,6 +262,20 @@ public:
     }
 
     /**
+        Begins a visibility section.
+
+        Params:
+            visibility = The visibility to use in the section.
+    */
+    void beginVisibility(string visibility) {
+        if (indents.depth > 0) {
+            this.indent(-indents.indents[$-1]);
+            this.writefln("%s:", visibility);
+            this.unindent();
+        }
+    }
+
+    /**
         Begins a new block.
     */
     void beginBlock() {
@@ -271,7 +288,7 @@ public:
     */
     void endBlock(bool newline=true) {
         this.unindent();
-        this.writeOne("}");
+        this.write("}");
 
         if (newline)
             this.writeNewline();
@@ -347,10 +364,10 @@ public:
         // Enumerations
         if (auto enum_t = cast(GDEEnum)type) {
             this.writeDDOC(enum_t.ddoc);
-            this.writef("enum %s ", enum_t.name);
+            this.writef("enum %s : %s ", enum_t.d_name, enum_t.type.d_full_name);
             this.beginBlock();
             
-                foreach(member_t; enum_t.members) {
+                foreach(member_t; cast(GDEEnumMember[])enum_t.members) {
                     this.writeDDOC(member_t.ddoc);
                     this.writefln("%s = %s,", member_t.name, member_t.value);
                 }
@@ -359,11 +376,17 @@ public:
             
             foreach(member_t; enum_t.members) {
                 this.writeDDOC(member_t.ddoc);
-                this.writefln("enum %s %s = %s.%s;", enum_t.name, member_t.name, enum_t.name, member_t.name);
+                this.writefln("enum %s %s = %s.%s;", enum_t.d_name, member_t.name, enum_t.d_name, member_t.name);
             }
             return;
         }
         
+        // Manifest constants.
+        if (auto const_t = cast(GDEManifestConstant)type) {
+            this.writeDDOC(const_t.ddoc);
+            this.writefln("enum %s = %s;", const_t.name, const_t.value);
+        }
+
         // Data structures
         if (auto struct_t = cast(GDEStruct)type) {
             this.writeDDOC(struct_t.ddoc);
@@ -386,6 +409,76 @@ public:
             return;
         }
         
+        // Bound class methods
+        if (auto mthd_t = cast(GDEMethod)type) {
+            if (mthd_t.isStatic)
+                return;
+
+            this.writenls();
+            this.writeDDOC(mthd_t.ddoc);
+
+            if (mthd_t.isOverride)
+                this.write("override ");
+
+            this.writef("%s %s(%s) ", mthd_t.returnType.d_full_name, mthd_t.d_name, mthd_t.params.toParamList(true).join(", "));
+            this.beginBlock();
+                this.writeln("__gshared GDExtensionMethodBindPtr __bind;");
+                this.writeln("if (!__bind)");
+                this.indent(4);
+                    this.writefln("__bind = gde_get_method_bind!(typeof(this))(\"%s\", %s);", mthd_t.name, mthd_t.hash);
+                this.unindent();
+                if (mthd_t.params.length > 0)
+                    this.writefln("return gde_ptrcall!(%s)(ptr, __bind, %s);", mthd_t.returnType.d_full_name, mthd_t.params.toParamNames.join(", "));
+                else
+                    this.writefln("return gde_ptrcall!(%s)(ptr, __bind);", mthd_t.returnType.d_full_name);
+            this.endBlock();
+            return;
+        }
+
+        // Bound class properties
+        if (auto prop_t = cast(GDEProperty)type) {
+            this.writeDDOC(prop_t.ddoc);
+            
+            // indexed property.
+            if (prop_t.index >= 0) {
+                if (prop_t.getter) 
+                    this.writefln("@property %1$s %2$s() => cast(%1$s)%3$s(cast(%4$s)%5$s);", 
+                        prop_t.getter.returnType.d_full_name,
+                        prop_t.d_name, 
+                        prop_t.getter.d_name, 
+                        prop_t.getter.params[0].type.d_full_name, 
+                        prop_t.index
+                    );
+                if (prop_t.setter)
+                    this.writefln("@property void %s(%s value) { %s(cast(%s)%s, cast(%s)value); };", 
+                        prop_t.d_name,
+                        prop_t.setter.params[1].type.d_full_name, 
+                        prop_t.setter.d_name, 
+                        prop_t.setter.params[0].type.d_full_name, 
+                        prop_t.index,
+                        prop_t.setter.params[1].type.d_full_name, 
+                    );
+            
+                return;
+            }
+
+            if (prop_t.getter) 
+                this.writefln("@property %s %s() => cast(%s)%s;", 
+                    prop_t.getter.returnType.d_full_name, 
+                    prop_t.d_name,
+                    prop_t.getter.returnType.d_full_name, 
+                    prop_t.getter.d_name
+                );
+            if (prop_t.setter)
+                this.writefln("@property void %s(%s value) { %s(cast(%s)value); };", 
+                    prop_t.d_name, 
+                    prop_t.setter.params[0].type.d_full_name, 
+                    prop_t.setter.d_name, 
+                    prop_t.setter.params[0].type.d_full_name
+                );
+            return;
+        }
+        
         // Function definitions
         if (auto func_t = cast(GDEFunc)type) {
             this.writeDDOC(func_t.ddoc);
@@ -404,6 +497,57 @@ public:
         if (auto handle_t = cast(GDEHandle)type) {
             this.writeDDOC(handle_t.ddoc);
             this.writefln("alias %s = %s;", handle_t.name, handle_t.type.name);
+        }
+
+        // Classes
+        if (auto class_t = cast(GDEClass)type) {
+            
+            // This is implemeted by hand.
+            if (class_t.name == "GDEObject")
+                return;
+
+            this.writeDDOC(class_t.ddoc);
+
+            if (class_t.name != class_t.d_name) {
+                this.writefln("@class_name(\"%s\")", class_t.name);
+            }
+
+            this.writef("class %s : %s ", class_t.d_full_name, class_t.inherits ? class_t.inherits.d_full_name : "GDEObject");
+            this.beginBlock();
+            this.beginVisibility("protected");
+            this.beginVisibility("@nogc");
+            
+            // Write methods
+            foreach(method_t; class_t.methods) {
+                if (method_t.isProtected)
+                    this.writeType(method_t);
+            }
+
+            this.writenls();
+            this.beginVisibility("public");
+
+            // Write class constants
+            foreach(const_t; class_t.constants) {
+                this.writeType(const_t);
+            }
+
+            // Write class enums
+            foreach(enum_t; class_t.enums) {
+                this.writeType(enum_t);
+            }
+            
+            // Write methods
+            foreach(method_t; class_t.methods) {
+                if (!method_t.isProtected)
+                    this.writeType(method_t);
+            }
+            
+            // Write properties
+            foreach(prop_t; class_t.properties) {
+                this.writeType(prop_t);
+            }
+
+            this.endBlock();
         }
     }
 
@@ -454,13 +598,13 @@ public:
 // Helper struct that handles indentation more efficiently.
 struct Indent {
 private:
-    int[] indents;
+    int[] indents_;
     string indentString;
     int indentTotal;
 
     void update() {
         indentTotal = 0;
-        foreach(indent; indents)
+        foreach(indent; indents_)
             indentTotal += indent;
         
         if (indentTotal > indentString.length) {
@@ -471,6 +615,11 @@ private:
     }
 
 public:
+
+    /**
+        The list of indent counts.
+    */
+    @property int[] indents() => indents_;
 
     /**
         A string representing the indentation stored in the indent.
@@ -494,7 +643,7 @@ public:
             spaces = How many spaces to push.
     */
     void push(int spaces) {
-        indents ~= spaces;
+        indents_ ~= spaces;
         this.update();
     }
 
@@ -503,7 +652,7 @@ public:
     */
     void pop() {
         if (indents.length > 0) {
-            indents.length--;
+            indents_.length--;
             this.update();
         }
     }

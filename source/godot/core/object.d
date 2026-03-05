@@ -41,11 +41,6 @@ private:
 protected:
 
     /**
-        Called by the implementation when initializing the type.
-    */
-    void onInitialize() { }
-
-    /**
         Called when the object gets a notification.
 
         Params:
@@ -59,7 +54,7 @@ public:
     /**
         Gets the underlying godot object pointer.
     */
-    final @property GDExtensionObjectPtr ptr() @system => nativePtr_;
+    final @property GDExtensionObjectPtr ptr() @system nothrow pure => nativePtr_;
 
     /**
         Sets the given property to the given value.
@@ -171,8 +166,8 @@ if (is(T : GDEObject)) {
 }
 
 /**
-    Registers a class with Godot.
-*/
+//     Registers a class with Godot.
+// */
 template GodotClass(T)
 if (is(T : GDEObject)) {
     import ldc.attributes;
@@ -181,43 +176,18 @@ if (is(T : GDEObject)) {
     import godot.core.bind;
     import godot.core.traits;
     
-    extern extern(C) GDExtensionBool __gde_class_get_func(void* p_instance, StringName* p_name, Variant* p_variant) @nogc nothrow;
-    extern extern(C) GDExtensionBool __gde_class_set_func(void* p_instance, StringName* p_name, Variant* p_variant) @nogc nothrow;
-    extern extern(C) GDExtensionBool __gde_class_property_can_revert_func(void* p_instance, StringName* p_name) @nogc nothrow;
-    extern extern(C) GDExtensionBool __gde_class_property_get_revert_func(void* p_instance, StringName* p_name, Variant* p_variant) @nogc nothrow;
-    extern extern(C) void __gde_class_notification_func(void* p_instance, int p_what, GDExtensionBool p_reversed) @nogc nothrow;
-    extern extern(C) void __gde_class_to_string_func(void* p_instance, GDExtensionBool* r_is_valid, String* r_out) @nogc nothrow;
-
-    //
-    //                  IMPLEMENTATION
-    //
-
     static assert(!isGodotNativeClass!T, "Cannot register native godot classes as extension classes!");
     static if (is(T PT == super)) {
 
         // Startup binding
         @section("__gde_startup")
         pragma(mangle, gdeMangleOf!(T, __gde_class_startup))
-        extern(C) GDClassStartupFunc __gde_class_startup = cast(GDClassStartupFunc)&__gde_register;
+        auto __gde_class_startup = &gde_bind_class!(T);
     
         // Shutdown binding
         @section("__gde_shutdown")
         pragma(mangle, gdeMangleOf!(T, __gde_class_shutdown))
-        extern(C) GDClassShutdownFunc __gde_class_shutdown = cast(GDClassShutdownFunc)&__gde_unregister;
-
-
-        // Registration function
-        pragma(mangle, gdeMangleOf!(T, __gde_register))
-        extern(C) void __gde_register() @nogc {
-            gde_bind_class!T();
-        }
-
-        // Unregistration function
-        pragma(mangle, gdeMangleOf!(T, __gde_unregister))
-        extern(C) void __gde_unregister() @nogc {
-            StringName className = classNameOf!T;
-            classdb_unregister_extension_class(__godot_class_library, &className);
-        }
+        auto __gde_class_shutdown = &gde_unbind_class!(T);
     }
 }
 
@@ -229,8 +199,8 @@ private:
 template __nu_gde_instance_callbacks(T) {
     static if (isGodotNativeClass!T) {
         pragma(mangle, "__nu_gde_create_callback_"~__traits(identifier, T))
-        extern(C) void __nu_gde_create_callback(void *p_token, void *p_instance) @nogc {
-            return gde_alloc_class!T(p_instance);
+        extern(C) void* __nu_gde_create_callback(void *p_token, void *p_instance) @nogc {
+            return cast(void*)gde_alloc_class!T(p_instance);
         }
 
         pragma(mangle, "__nu_gde_free_callback_"~__traits(identifier, T))
@@ -240,15 +210,14 @@ template __nu_gde_instance_callbacks(T) {
         }
 
         pragma(mangle, "__nu_gde_reference_callback_"~__traits(identifier, T))
-        extern(C) void __nu_gde_reference_callback(void *p_token, void *p_instance, GDExtensionBool p_reference) @nogc {
+        extern(C) ubyte __nu_gde_reference_callback(void *p_token, void *p_instance, GDExtensionBool p_reference) @nogc {
             return true;
         }
 
-        pragma(mangle, "__nu_gde_instance_callbacks_"~__traits(identifier, T))
         extern(C) __gshared const GDExtensionInstanceBindingCallbacks __nu_gde_instance_callbacks = GDExtensionInstanceBindingCallbacks(
-            create_callback: &__nu_gde_create_callback,
-            free_callback: &__nu_gde_free_callback,
-            reference_callback: &__nu_gde_reference_callback
+            create_callback: cast(typeof(GDExtensionInstanceBindingCallbacks.create_callback))&__nu_gde_create_callback,
+            free_callback: cast(typeof(GDExtensionInstanceBindingCallbacks.free_callback))&__nu_gde_free_callback,
+            reference_callback: cast(typeof(GDExtensionInstanceBindingCallbacks.reference_callback))&__nu_gde_reference_callback
         );
     } else {
         pragma(mangle, "__nu_gde_create_callback_"~__traits(identifier, T))

@@ -17,10 +17,27 @@ import std.format;
 string[] toParamList(GDEFuncParam[] params, bool useNames) {
     string[] result;
     foreach(param; params) {
-        if (useNames && param.name)
-            result ~= "%s %s".format(param.type.name, param.name);
+        if (useNames && param.d_full_name)
+            result ~= "%s %s".format(param.type.d_full_name, param.name);
         else
-            result ~= param.type.name;
+            result ~= param.type.d_full_name;
+    }
+    return result;
+}
+
+/**
+    Gets a list of the names of the parameters of a function.
+
+    Params:
+        params =    The parameter list.
+    
+    Returns:
+        An array of parameter names.
+*/
+string[] toParamNames(GDEFuncParam[] params) {
+    string[] result;
+    foreach(param; params) {
+        result ~= param.name;
     }
     return result;
 }
@@ -38,6 +55,202 @@ T[] findTypes(T, U)(U[] slice) {
         if (cast(T)item)
             result ~= cast(T)item;
     return result;
+}
+
+/**
+    Converts the given text from PascalCase to snake_case.
+
+    Params:
+        text = The text to convert.
+    
+    Returns:
+        The text as snake case.
+*/
+string toSnakeCase(string text) {
+    import std.string : toLower;
+    import std.ascii : isUpper, isLower, isDigit;
+
+    string result;
+    foreach(i, c; text) {
+        bool isPrevNumeric = i-1 < text.length && isDigit(text[i-1]);
+        bool isNextLower = i+1 < text.length && isLower(text[i+1]);
+
+        if (isUpper(c)) {
+            if (i != 0 && isNextLower && !isPrevNumeric)
+                result ~= "_";
+            
+            result ~= toLower(c);
+            continue;
+        }
+
+        result ~= c;
+    }
+    return result;
+}
+
+/**
+    Converts snake_case to camelCase.
+
+    Params:
+        text = The text to convert.
+    
+    Returns:
+        The text as camel case.
+*/
+string toCamelCase(string text) {
+    import std.string : toUpper;
+    string result;
+    
+    bool upper;
+    foreach(i, c; text) {
+        if (c == '_') {        
+            if (i != 0)
+                upper = true;
+            
+            continue;
+        }
+
+        result ~= upper ? toUpper(c) : c;
+        upper = false;
+    }
+
+    return result;
+}
+
+/**
+    Filters the text for reserved D symbols.
+
+    Params:
+        text = The text to filter.
+    
+    Returns:
+        The text with D keywords turned into valid 
+        symbols.
+*/
+string filterReserved(string text) {
+    switch(text) {
+        case "abstract":
+        case "alias":
+        case "align":
+        case "asm":
+        case "assert":
+        case "auto":
+        case "body":
+        case "bool":
+        case "break":
+        case "byte":
+        case "case":
+        case "cast":
+        case "catch":
+        case "cdouble":
+        case "cent":
+        case "cfloat":
+        case "char":
+        case "class":
+        case "const":
+        case "continue":
+        case "creal":
+        case "dchar":
+        case "debug":
+        case "default":
+        case "delegate":
+        case "delete":
+        case "deprecated":
+        case "do":
+        case "double":
+        case "else":
+        case "enum":
+        case "export":
+        case "extern":
+        case "false":
+        case "final":
+        case "finally":
+        case "float":
+        case "for":
+        case "foreach":
+        case "foreach_reverse":
+        case "function":
+        case "goto":
+        case "idouble":
+        case "if":
+        case "ifloat":
+        case "immutable":
+        case "import":
+        case "in":
+        case "inout":
+        case "int":
+        case "interface":
+        case "invariant":
+        case "ireal":
+        case "is":
+        case "lazy":
+        case "long":
+        case "macro":
+        case "mixin":
+        case "module":
+        case "new":
+        case "nothrow":
+        case "null":
+        case "out":
+        case "override":
+        case "package":
+        case "pragma":
+        case "private":
+        case "protected":
+        case "public":
+        case "pure":
+        case "real":
+        case "ref":
+        case "return":
+        case "scope":
+        case "shared":
+        case "short":
+        case "static":
+        case "struct":
+        case "super":
+        case "switch":
+        case "synchronized":
+        case "template":
+        case "this":
+        case "throw":
+        case "true":
+        case "try":
+        case "typeid":
+        case "typeof":
+        case "ubyte":
+        case "ucent":
+        case "uint":
+        case "ulong":
+        case "union":
+        case "unittest":
+        case "ushort":
+        case "version":
+        case "void":
+        case "wchar":
+        case "while":
+        case "with":
+            return text~"_";
+        
+        case "Object":
+            return "GDObject";
+
+        case "Error":
+            return "GDError";
+
+        case "String":
+            return "string";
+
+        default:
+            import std.ascii : isAlphaNum;
+            string result;
+            foreach(c; text) {
+                if (!isAlphaNum(c))
+                    continue;
+
+                result ~= c;
+            }
+            return result;
+    }
 }
 
 /**
@@ -104,6 +317,25 @@ string popIdentifier(ref string buffer) {
 }
 
 /**
+    Counts characters until the given character is encountered.
+
+    Params:
+        buffer =    The buffer to search
+        c =         The character to find.
+    
+    Returns:
+        The offset of the character if found,
+        $(D -1) otherwise.
+*/
+ptrdiff_t countUntil(string buffer, char c) {
+    foreach(i, bc; buffer)
+        if (bc == c)
+            return i;
+    
+    return -1;
+}
+
+/**
     Pops all the next whitespace characters from the buffer.
     
     Params:
@@ -119,6 +351,18 @@ ref string popWhite(ref return string buffer) {
     buffer = buffer[i..$];
 
     return buffer;
+}
+
+/**
+    Skips ahead in the buffer.
+
+    Params:
+        buffer = the buffer.
+        amount = The amount to skip.
+*/
+void skip(ref string buffer, ptrdiff_t amount = 1) {
+    if (buffer.length > 0)
+        buffer = buffer[amount..$];
 }
 
 /**
