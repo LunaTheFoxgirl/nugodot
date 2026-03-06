@@ -12,20 +12,7 @@ import godot.variant.variant;
 import godot.variant.string;
 import numem;
 
-/**
-    Specifies the name a class should be bound as.
-*/
-struct class_name { string name; } // @suppress(dscanner.style.phobos_naming_convention)
-
-/**
-    Specifies the icon to use for the type.
-*/
-struct class_icon { string path; }
-
-/**
-    Exports a given property in the inspector.
-*/
-struct gd_export; // @suppress(dscanner.style.phobos_naming_convention)module godot.core.gde.object;
+public import godot.core.registration : GodotClass;
 
 /**
     Base class for all wrapped Godot objects.
@@ -165,32 +152,6 @@ if (is(T : GDEObject)) {
 
         assert(0, "Tried to instantiate an abstract class!");
         return null;
-    }
-}
-
-/**
-//     Registers a class with Godot.
-// */
-template GodotClass(T)
-if (is(T : GDEObject)) {
-    import ldc.attributes;
-    import godot.core.gdextension;
-    import godot.core.wrap;
-    import godot.core.bind;
-    import godot.core.traits;
-    
-    static assert(!isGodotNativeClass!T, "Cannot register native godot classes as extension classes!");
-    static if (is(T PT == super)) {
-
-        // Startup binding
-        @section("__gde_startup")
-        pragma(mangle, gdeMangleOf!(T, __gde_class_startup))
-        auto __gde_class_startup = &gde_bind_class!(T);
-    
-        // Shutdown binding
-        @section("__gde_shutdown")
-        pragma(mangle, gdeMangleOf!(T, __gde_class_shutdown))
-        auto __gde_class_shutdown = &gde_unbind_class!(T);
     }
 }
 

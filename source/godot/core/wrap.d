@@ -9,61 +9,20 @@ import godot.core.lifetime;
 import godot.variant;
 import numem.core.hooks;
 
+/**
+    Specifies the name a class should be bound as.
+*/
+struct class_name { string name; }
 
 /**
-    Godot class startup function type.
+    Specifies the icon to use for the type.
 */
-alias GDClassStartupFunc = void function() @nogc nothrow;
+struct class_icon { string path; }
 
 /**
-    Godot class shutdown function type.
+    Annotates the binding name for a method.
 */
-alias GDClassShutdownFunc = void function() @nogc nothrow;
-
-private {
-    import ldc.attributes;
-
-    // NOTE:    These are linker sections for startup and shutdown
-    //          functions.
-    //          LLVM will insert these symbols automatically at the
-    //          start and end of user set variables at these symbols.
-
-    export extern(C) extern GDClassStartupFunc __start___gde_startup;
-    export extern(C) extern GDClassStartupFunc __stop___gde_startup;
-
-    export extern(C) extern GDClassShutdownFunc __start___gde_shutdown;
-    export extern(C) extern GDClassShutdownFunc __stop___gde_shutdown;
-}
-
-/**
-    Fetches the extension class startup functions from this library.
-
-    All initializers are stored in the `__gde_startup` section.
-
-    Returns:
-        A slice over all the functions.
-*/
-GDClassStartupFunc[] gde_get_class_startup_functions() @nogc nothrow {
-    size_t startAddr = cast(size_t)(cast(void*)&__start___gde_startup);
-    size_t stopAddr = cast(size_t)(cast(void*)&__stop___gde_startup);
-    ptrdiff_t fCount = (stopAddr-startAddr)/(GDClassStartupFunc.sizeof);
-    return (&__start___gde_startup)[0..fCount];
-}
-
-/**
-    Fetches the extension class cleanup functions from this library.
-
-    All initializers are stored in the `__gde_shutdown` section.
-
-    Returns:
-        A slice over all the functions.
-*/
-GDClassShutdownFunc[] gde_get_class_shutdown_functions() @nogc nothrow {
-    size_t startAddr = cast(size_t)(cast(void*)&__start___gde_shutdown);
-    size_t stopAddr = cast(size_t)(cast(void*)&__stop___gde_shutdown);
-    ptrdiff_t fCount = (stopAddr-startAddr)/(GDClassShutdownFunc.sizeof);
-    return (&__start___gde_shutdown)[0..fCount];
-}
+struct method_name { string name; }
 
 /**
     Gets a GDExtension MethodBindPtr for a given name and hash.
@@ -421,8 +380,9 @@ if (variantTypeOf!T != GDEXTENSION_VARIANT_TYPE_NIL) {
         
         variant_from_rid(&result, &value);
     } else static if (is(T : GDEObject)) {
-
-        variant_from_object(&result, value.ptr);
+        if (value)
+            variant_from_object(&result, value.ptr);
+        
     } else {
         static assert(0, "Wrapping of type "~T.stringof~" is not currently supported!");
     }

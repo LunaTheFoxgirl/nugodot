@@ -2,6 +2,7 @@
     Bindings and utilities for the GDExtension API.
 */
 module godot.core.gdextension;
+import godot.core.registration;
 
 public import godot.core.gdextension.iface;
 public import godot.core.gdextension.variant_size;
@@ -43,22 +44,37 @@ extern(C) export GDExtensionBool __gde_library_initialize(GDExtensionInterfaceGe
 //
 private:
 
-extern(C) void __gde_extension_init(void *p_userdata, GDExtensionInitializationLevel p_level) @nogc nothrow {
-    import godot.core.wrap : gde_get_class_startup_functions;
+// Gets the next depth value to instantiate.
+size_t getNextDepth(size_t current, GDEClassRegistrationInfo[] classes) @nogc nothrow {
+    size_t lowest = size_t.max;
+    foreach(klass; classes) {
+        if (klass.inheritDepth > current && klass.inheritDepth < lowest)
+            lowest = klass.inheritDepth;
+    }
+    return lowest;
+}
 
-    if (p_level == GDEXTENSION_INITIALIZATION_SCENE) {    
-        foreach(startupFunc; gde_get_class_startup_functions()) {
-            startupFunc();
+extern(C) void __gde_extension_init(void *p_userdata, GDExtensionInitializationLevel p_level) @nogc nothrow {
+    if (p_level == GDEXTENSION_INITIALIZATION_SCENE) {
+        GDEClassRegistrationInfo[] classes = gde_get_registrations();
+        size_t loaded = 0;
+        size_t toLoad = 0;
+        while(loaded < classes.length) {
+            toLoad = toLoad.getNextDepth(classes);
+            foreach(klass; classes) {
+                if (klass.inheritDepth == toLoad) {
+                    klass.registration();
+                    loaded++;
+                }
+            }
         }
     }
 }
 
 extern(C) void __gde_extension_shutdown(void *p_userdata, GDExtensionInitializationLevel p_level) @nogc nothrow {
-    import godot.core.wrap : gde_get_class_shutdown_functions;
-
     if (p_level == GDEXTENSION_INITIALIZATION_SCENE) {
-        foreach(shutdownFunc; gde_get_class_shutdown_functions()) {
-            shutdownFunc();
+        foreach(klass; gde_get_registrations()) {
+            klass.unregistration();
         }
     }
 }

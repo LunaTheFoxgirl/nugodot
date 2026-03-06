@@ -4,6 +4,7 @@
 module godot.core.traits;
 import godot.core.gdextension;
 import godot.core.object;
+import godot.core.wrap;
 
 public import numem.core.traits;
 public import numem.core.meta;
@@ -21,6 +22,24 @@ if (is(T : GDEObject)) {
         enum classNameOf = getUDAs!(T, class_name)[0].name;
     } else {
         enum classNameOf = __traits(identifier, T);
+    }
+}
+
+/**
+    Gets the name of a given method.
+
+    Params:
+        method = The method to get the name of.
+*/
+template methodNameOf(alias method) {
+    static if (hasUDA!(method, method_name)) {
+        enum methodNameOf = getUDAs!(method, method_name)[0].name;
+    } else static if (__traits(isOverrideFunction, method)) {
+        static if (is(__traits(parent, method) PT == super)) {
+            enum methodNameOf = methodNameOf!(__traits(getMember, PT, __traits(identifier, method)));
+        }
+    } else {
+        enum methodNameOf = toSnakeCase!(__traits(identifier, method));
     }
 }
 
@@ -91,6 +110,20 @@ template variantTypeOf(T) {
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_ARRAY;
     else
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_NIL;
+}
+
+/**
+    Gets the inheritance depth of a given type.
+*/
+template getInheritanceDepth(T)
+if (is(T : GDEObject)) {
+    static if (is(T == GDEObject)) {
+        enum getInheritanceDepth = 0;
+    } else static if (is(T PT == super)) {
+        enum getInheritanceDepth = getInheritanceDepth!(PT)+1;
+    } else {
+        enum getInheritanceDepth = -1;
+    }
 }
 
 /**
@@ -241,6 +274,18 @@ template methodFlagsOf(alias method) {
         (__traits(isStaticFunction, method) ? cast(uint)GDEXTENSION_METHOD_FLAG_STATIC : 0) |
         (__traits(isAbstractFunction, method) ? cast(uint)GDEXTENSION_METHOD_FLAG_VIRTUAL_REQUIRED : 0) |
         (__traits(isVirtualMethod, method) ? cast(uint)GDEXTENSION_METHOD_FLAG_VIRTUAL : 0);
+}
+
+/**
+    Gets the method from its symbol alias or reference (via mixin).
+*/
+template methodOf(alias methodOrRef) {
+    static if (is(methodOrRef))
+        alias methodOf = methodOrRef;
+    else static if (is(mixin(methodOrRef)))
+        alias methodOf = mixin(methodOrRef);
+    else
+        static assert(0, "Could not convert ", methodOrRef, " to a method alias!");
 }
 
 /**

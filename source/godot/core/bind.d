@@ -5,6 +5,8 @@ import godot.core.traits;
 import godot.core.wrap;
 import godot.core;
 import godot.variant;
+import godot.globals;
+import godot.resource;
 
 import numem.core.hooks : nu_malloc, nu_free;
 import numem : nogc_new, nogc_delete;
@@ -125,7 +127,7 @@ if (is(T : GDEObject)) {
 void gde_bind_method(T, alias method)(string name = null) @nogc
 if (is(T : GDEObject)) {
     enum paramCount = parametersOf!(method).length;
-    enum methodName = toSnakeCase!(__traits(identifier, method));
+    enum methodName = methodNameOf!method;
     string method_name = name ? name : methodName;
     string class_name = classNameOf!T;
 
@@ -163,8 +165,6 @@ if (is(T : GDEObject)) {
         arguments_info: p_params.ptr,
         arguments_metadata: p_param_metas.ptr,
     );
-    import core.stdc.stdio : printf;
-    printf("%s.%s: %u\n", class_name.ptr, method_name.ptr, p_methodinfo.default_argument_count);
     classdb_register_extension_class_method(__godot_class_library, &p_classname, &p_methodinfo);
 
     // Clean up parameters.
@@ -173,6 +173,7 @@ if (is(T : GDEObject)) {
 }
 
 void gde_bind_property(T, alias memberName)() @nogc {
+
     StringName p_classname = StringName(classNameOf!T);
     enum gdMemberName = toSnakeCase!(memberName);
 
@@ -199,10 +200,21 @@ void gde_bind_property(T, alias memberName)() @nogc {
 
     StringName* p_getter_name = gde_make_string_name(getterName);
     StringName* p_setter_name = gde_make_string_name(setterName);
+    
+    static if (is(propType : Resource)) {
 
-    auto p_prop_info = gde_make_property_info!propType(gdMemberName);
-    classdb_register_extension_class_property(__godot_class_library, &p_classname, &p_prop_info, p_setter_name, p_getter_name);
-    gde_destroy_property_info(p_prop_info);
+        // NOTE:    Resources need to be provided with a hint to get the correct resource type
+        //          showing in the editor list.
+        auto p_prop_info = gde_make_property_info!propType(gdMemberName, PROPERTY_HINT_RESOURCE_TYPE, classNameOf!propType);
+        classdb_register_extension_class_property(__godot_class_library, &p_classname, &p_prop_info, p_setter_name, p_getter_name);
+        gde_destroy_property_info(p_prop_info);
+
+    } else {
+    
+        auto p_prop_info = gde_make_property_info!propType(gdMemberName);
+        classdb_register_extension_class_property(__godot_class_library, &p_classname, &p_prop_info, p_setter_name, p_getter_name);
+        gde_destroy_property_info(p_prop_info);
+    }
 
     gde_free_string_name(p_getter_name);
     gde_free_string_name(p_setter_name);

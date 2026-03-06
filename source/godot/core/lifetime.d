@@ -83,6 +83,10 @@ void gd_delete(T)(ref Ref!T value) @safe @nogc {
 */
 T gde_get(T)(GDExtensionObjectPtr ptr) @trusted @nogc
 if (is(T : GDEObject)) {
+    
+    // Null instance.
+    if (ptr is null)
+        return null;
 
     // Object already has a binding, return it.
     if (auto obj = cast(T)object_get_instance_binding(ptr, __godot_class_library, null))
