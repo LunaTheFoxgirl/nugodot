@@ -100,8 +100,11 @@ RetT gde_bind_and_call(GDExtensionVariantType type, string name, uint hash, RetT
         __bind = gde_get_builtin_method(type, name, hash);
     
     void*[Args.length] __params;
-    static foreach_reverse(param; args) {
-        __params = &param;
+    static foreach_reverse(i, arg; args) {
+        static if (is(typeof(param) : GDEObject))
+            __params[i] = arg.ptr;
+        else
+            __params[i] = &arg;
     }
 
     static if (!is(RetT == void)) {
@@ -149,8 +152,12 @@ void gde_bind_and_call_ctor(T, int ctor, Args...)(ref T obj, Args args) @nogc {
     
     static if (Args.length > 0) {
         void*[Args.length] __params;
-        static foreach_reverse(param; args)
-            __params ~= &param;
+        static foreach_reverse(i, arg; args) {
+            static if (is(typeof(param) : GDEObject))
+                __params[i] = arg.ptr;
+            else
+                __params[i] = &arg;
+        }
         __bindfn(&obj, __params.ptr);
     } else {
         __bindfn(&obj, null);
