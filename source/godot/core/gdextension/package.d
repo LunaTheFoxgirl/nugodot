@@ -55,19 +55,31 @@ size_t getNextDepth(size_t current, GDEClassRegistrationInfo[] classes) @nogc no
 }
 
 extern(C) void __gde_extension_init(void *p_userdata, GDExtensionInitializationLevel p_level) @nogc nothrow {
-    if (p_level == GDEXTENSION_INITIALIZATION_SCENE) {
-        GDEClassRegistrationInfo[] classes = gde_get_registrations();
-        size_t loaded = 0;
-        size_t toLoad = 0;
-        while(loaded < classes.length) {
-            toLoad = toLoad.getNextDepth(classes);
-            foreach(klass; classes) {
-                if (klass.inheritDepth == toLoad) {
-                    klass.registration();
-                    loaded++;
+    switch(p_level) {
+        case GDEXTENSION_INITIALIZATION_SCENE:
+            GDEClassRegistrationInfo[] classes = gde_get_registrations();
+            size_t loaded = 0;
+            size_t toLoad = 0;
+            while(loaded < classes.length) {
+                toLoad = toLoad.getNextDepth(classes);
+                foreach(klass; classes) {
+                    if (klass.inheritDepth == toLoad) {
+                        klass.registration();
+                        loaded++;
+                    }
                 }
             }
-        }
+            return;
+
+        case GDEXTENSION_INITIALIZATION_EDITOR:
+            foreach(klass; gde_get_registrations()) {
+                if (klass.docs)
+                    editor_help_load_xml_from_utf8_chars_and_len(klass.docs.ptr, cast(GDExtensionInt)klass.docs.length);
+            }
+            return;
+        
+        default:
+            return;
     }
 }
 

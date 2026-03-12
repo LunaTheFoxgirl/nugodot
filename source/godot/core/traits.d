@@ -26,6 +26,21 @@ if (is(T : GDEObject)) {
 }
 
 /**
+    Gets the godot XML documentation for the given class.
+
+    Params:
+        T = The type to get the Godot xml documentation of.
+*/
+template xmldocOf(T) 
+if (is(T : GDEObject)) {
+    static if (is(typeof(import(classNameOf!(T)~".xml")))) {
+        enum string xmldocOf = import(classNameOf!(T)~".xml");
+    } else {
+        enum string xmldocOf = "";
+    }
+}
+
+/**
     Gets the name of a given method.
 
     Params:
@@ -201,6 +216,25 @@ template isPropertyFunc(T, alias func) {
 template isMethod(T, string member) {
     enum isMethod = is(typeof(__traits(getMember, T, member)) == return) ||
         is(FunctionTypeOf!(__traits(getMember, T, member)) == return);
+}
+
+/**
+    Gets whether the given member is a godot constant.
+
+    Params:
+        T =     The class to check
+        func =  Name of the member
+*/
+template isConstant(T, string member) {
+    alias MT = typeof(__traits(getMember, T, member));
+
+    static if (is(MT MTY == enum)) {
+        enum isConstant = __traits(isIntegral, MTY);
+    } else static if (is(typeof(() => __traits(getMember, T, member)))) {
+        enum isConstant = __traits(isIntegral, MT);
+    } else {
+        enum isConstant = false;
+    }
 }
 
 /**
@@ -380,6 +414,35 @@ template toSnakeCase(string value) {
                 }
 
                 out_ ~= c;
+            }
+            return out_;
+        }
+        return null;
+    }(value);
+}
+
+/**
+    Converts the given string to screaming snake case at compile time.
+
+    Params:
+        value = The string to convert to snake case.
+*/
+template toScreamingSnakeCase(string value) {
+    enum toScreamingSnakeCase = (string v) {
+        if (__ctfe) {
+            import std.uni : isUpper, toUpper;
+
+            string out_;
+            foreach(i, c; v) {
+                if (isUpper(c)) {
+                    if (i != 0)
+                        out_ ~= "_";
+                    
+                    out_ ~= c;
+                    continue;
+                }
+
+                out_ ~= toUpper(c);
             }
             return out_;
         }

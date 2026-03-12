@@ -63,8 +63,15 @@ if (is(T : GDEObject)) {
 
         // Register class
         gde_register_extension_class(classNameOf!T, classNameOf!PT, classInfo);
+
+        // Bind members
         static foreach(member; boundMembersOf!T) {
             gde_bind_member!(T, member)();
+        }
+
+        // Bind constructors
+        static if (is(typeof(T.__ctor))) {
+            gde_bind_ctors!T();
         }
     }
 }
@@ -115,7 +122,9 @@ if (is(T : GDEObject)) {
 
 void gde_bind_member(T, alias member)() @nogc
 if (is(T : GDEObject)) {
-    static if (isPropertyFunc!(T, member)) {
+    static if (isConstant!(T, member)) {
+        gde_bind_const!(T, member);
+    } else static if (isPropertyFunc!(T, member)) {
         gde_bind_property!(T, member);
     } else static if (isMethod!(T, member)) {
         gde_bind_method!(T, __traits(getMember, T, member))();
@@ -172,6 +181,15 @@ if (is(T : GDEObject)) {
         gde_destroy_property_info(p_params[i]);
 }
 
+void gde_bind_ctors(T)() @nogc {
+    alias __dctors = __traits(getOverloads, T, "__ctor");
+    static if (__dctors.length == 1) {
+        gde_bind_method!(T, __dctors[0])("_init");
+    }
+
+    // TODO: bind ctors with more 
+}
+
 void gde_bind_property(T, alias memberName)() @nogc {
 
     StringName p_classname = StringName(classNameOf!T);
@@ -220,7 +238,30 @@ void gde_bind_property(T, alias memberName)() @nogc {
     gde_free_string_name(p_setter_name);
 }
 
+void gde_bind_const(T, alias memberName)() @nogc {
+    alias member = __traits(getMember, T, memberName);
+    StringName p_classname = StringName(classNameOf!T);
+    StringName p_enumname;
+    StringName p_constname;
+    GDExtensionInt p_value;
+    
+    static if (is(typeof(member) == enum)) {
+        
+        // Enums
+        p_enumname = StringName(__traits(identifier, member));
+        static foreach(enumMember; __traits(getMembers, member)) {
+            p_constname = StringName(toScreamingSnakeCase!(__traits(identifier, enumMember)));
+            p_value = cast(GDExtensionInt)__traits(getMember, T, memberName);
+            classdb_register_extension_class_integer_constant(__godot_class_library, &p_classname, &p_enumname, &p_constname, p_value, false);
+        }
+    } else {
 
+        // Manifest constants and consts
+        p_constname = StringName(toScreamingSnakeCase!(__traits(identifier, member)));
+        p_value = cast(GDExtensionInt)__traits(getMember, T, memberName);
+        classdb_register_extension_class_integer_constant(__godot_class_library, &p_classname, &p_enumname, &p_constname, p_value, false);
+    }
+}
 
 
 // 

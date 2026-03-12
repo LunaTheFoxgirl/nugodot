@@ -14,6 +14,11 @@ struct GDEClassRegistrationInfo {
     string name;
 
     /**
+        XML documentation of the class.
+    */
+    string docs;
+
+    /**
         Inheritance depth of the registered class.
     */
     size_t inheritDepth;
@@ -50,17 +55,21 @@ if (is(T : GDEObject)) {
     import ldc.attributes;
     import godot.core.traits : getInheritanceDepth;
     import godot.core.registration : GDEClassRegistrationInfo;
-    import godot.core.traits : gdeMangleOf, classNameOf;
+    import godot.core.traits : gdeMangleOf, classNameOf, xmldocOf;
     import godot.core.bind : gde_bind_class, gde_unbind_class;
 
     private __gshared auto _bind_funcinst = &gde_bind_class!T;
     private __gshared auto _unbind_funcinst = &gde_unbind_class!T;
+
+    // Add documentation
+    enum XMLDOC = xmldocOf!T;
 
     @section("__gde_registration")
     pragma(mangle, gdeMangleOf!(T, __registration))
     export GDEClassRegistrationInfo __registration = GDEClassRegistrationInfo(
         name: classNameOf!T,
         inheritDepth: getInheritanceDepth!T,
+        docs: XMLDOC.length > 0 ? XMLDOC : null,
         registration: cast(typeof(GDEClassRegistrationInfo.registration))&gde_bind_class!T,
         unregistration: cast(typeof(GDEClassRegistrationInfo.unregistration))&gde_unbind_class!T,
     );
