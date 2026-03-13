@@ -120,9 +120,20 @@ if (is(T : GDEObject)) {
     }
 }
 
+void gde_bind_ctors(T)() @nogc {
+    alias __dctors = __traits(getOverloads, T, "__ctor");
+    static if (__dctors.length == 1) {
+        gde_bind_method!(T, __dctors[0])("_init");
+    }
+
+    // TODO: bind ctors with more 
+}
+
 void gde_bind_member(T, alias member)() @nogc
 if (is(T : GDEObject)) {
-    static if (isConstant!(T, member)) {
+    static if (isSignal!(T, member)) {
+        gde_bind_signal!(T, member);
+    } else static if (isConstant!(T, member)) {
         gde_bind_const!(T, member);
     } else static if (isPropertyFunc!(T, member)) {
         gde_bind_property!(T, member);
@@ -131,6 +142,28 @@ if (is(T : GDEObject)) {
     } else {
         pragma(msg, "Could not bind "~member.stringof~"...");
     }
+}
+
+void gde_bind_signal(T, alias signal)() @nogc
+if (is(T : GDEObject)) {
+    enum paramCount = __traits(getMember, T, signal).ArgsT.length;
+    enum signalName = signalNameOf!(__traits(getMember, T, signal));
+    
+    StringName p_classname = StringName(classNameOf!T);
+    StringName p_signalname = StringName(signalName);
+
+    // Fill out parameters.
+    GDExtensionPropertyInfo[paramCount] p_params;
+    static foreach(i, param; parametersOf!(__traits(getMember, T, signal))) {
+        p_params[i] = gde_make_property_info!(param)("param"~(cast(int)i).stringof);
+    }
+
+    // Register signal
+    classdb_register_extension_class_signal(__godot_class_library, &p_classname, &p_signalname, p_params.ptr, cast(GDExtensionInt)p_params.length);
+
+    // Clean up parameters.
+    static foreach(i; 0..paramCount)
+        gde_destroy_property_info(p_params[i]);
 }
 
 void gde_bind_method(T, alias method)(string name = null) @nogc
@@ -179,15 +212,6 @@ if (is(T : GDEObject)) {
     // Clean up parameters.
     static foreach(i; 0..paramCount)
         gde_destroy_property_info(p_params[i]);
-}
-
-void gde_bind_ctors(T)() @nogc {
-    alias __dctors = __traits(getOverloads, T, "__ctor");
-    static if (__dctors.length == 1) {
-        gde_bind_method!(T, __dctors[0])("_init");
-    }
-
-    // TODO: bind ctors with more 
 }
 
 void gde_bind_property(T, alias memberName)() @nogc {

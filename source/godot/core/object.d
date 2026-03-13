@@ -130,6 +130,7 @@ RetT call(RetT = void, ClassT, Args...)(ClassT klass, string name, long hash, au
 T gde_alloc_class(T)(GDExtensionObjectPtr ptr) @system @nogc
 if (is(T : GDEObject)) {
     import numem.core.hooks : nu_malloc, nu_memcpy;
+    import godot.variant : Signal;
 
     static if (!__traits(isAbstractClass, T)) {
 
@@ -146,6 +147,11 @@ if (is(T : GDEObject)) {
         object_set_instance_binding(ptr, __godot_class_library, cast(void*)obj, &__nu_gde_instance_callbacks!T);
         static if (is(typeof(() => T.init.__ctor())))
             obj.__ctor();
+
+        // Wrap signals.
+        static foreach(signal; boundSignalsOf!T) {
+            __traits(getMember, obj, signal) = typeof(__traits(getMember, T, signal))(obj, StringName(signalNameOf!(__traits(getMember, T, signal))));
+        }
 
         return obj;
     } else {

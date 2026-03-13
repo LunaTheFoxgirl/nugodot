@@ -431,7 +431,7 @@ public:
             this.writenls();
             this.writeDDOC(mthd_t.ddoc);
 
-            this.writef("@method_name(\"%s\") ", mthd_t.name);
+            this.writef("@gd_name(\"%s\") ", mthd_t.name);
             if (mthd_t.isStatic)
                 this.write("static ");
 

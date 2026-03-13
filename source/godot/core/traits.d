@@ -5,25 +5,11 @@ module godot.core.traits;
 import godot.core.gdextension;
 import godot.core.object;
 import godot.core.wrap;
+import godot.core.attribs;
 
 public import numem.core.traits;
 public import numem.core.meta;
 public import numem.core.math;
-
-/**
-    Gets the Godot class name of the given type.
-
-    Params:
-        T = The type to get the Godot classname of.
-*/
-template classNameOf(T)
-if (is(T : GDEObject)) {
-    static if (hasUDA!(T, class_name)) {
-        enum classNameOf = getUDAs!(T, class_name)[0].name;
-    } else {
-        enum classNameOf = __traits(identifier, T);
-    }
-}
 
 /**
     Gets the godot XML documentation for the given class.
@@ -41,20 +27,49 @@ if (is(T : GDEObject)) {
 }
 
 /**
-    Gets the name of a given method.
+    Gets the Godot class name of the given type.
 
     Params:
-        method = The method to get the name of.
+        T = The type to get the Godot classname of.
 */
-template methodNameOf(alias method) {
-    static if (hasUDA!(method, method_name)) {
-        enum methodNameOf = getUDAs!(method, method_name)[0].name;
-    } else static if (__traits(isOverrideFunction, method)) {
-        static if (is(__traits(parent, method) PT == super)) {
-            enum methodNameOf = methodNameOf!(__traits(getMember, PT, __traits(identifier, method)));
+template classNameOf(T)
+if (is(T : GDEObject)) {
+    static if (hasUDA!(T, class_name)) {
+        enum classNameOf = getUDAs!(T, class_name)[0].name;
+    } else {
+        enum classNameOf = __traits(identifier, T);
+    }
+}
+
+/**
+    Gets the name of a method.
+*/
+enum methodNameOf(alias method) = godotNameOf!(method, true);
+
+/**
+    Gets the name of a signal.
+*/
+enum signalNameOf(alias signal) = godotNameOf!(signal, true);
+
+/**
+    Gets the Godot name of a given symbol based on the
+    symbol's name or its gd_name annotation.
+
+    Params:
+        method =    The symbol to get the name of.
+        recursive = Whether subclasses should be recursed through.
+*/
+template godotNameOf(alias symbol, bool recursive) {
+    static if (is(typeof(symbol) : GDEObject)) {
+        enum godotNameOf = classNameOf!(typeof(symbol));
+    } else static if (hasUDA!(symbol, gd_name)) {
+        enum godotNameOf = getUDAs!(symbol, gd_name)[0].name;
+    } else static if (__traits(isOverrideFunction, symbol)) {
+        static if (is(__traits(parent, symbol) PT == super)) {
+            enum godotNameOf = godotNameOf!(__traits(getMember, PT, __traits(identifier, symbol)), recursive);
         }
     } else {
-        enum methodNameOf = toSnakeCase!(__traits(identifier, method));
+        enum godotNameOf = toSnakeCase!(__traits(identifier, symbol));
     }
 }
 
@@ -117,7 +132,7 @@ template variantTypeOf(T) {
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_OBJECT;
     else static if (is(T == Callable))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_CALLABLE;
-    else static if (is(T == Signal))
+    else static if (is(T == Signal!U, U...))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_SIGNAL;
     else static if (is(T == TypedDictionary!U, U...))
         enum variantTypeOf = GDEXTENSION_VARIANT_TYPE_DICTIONARY;
@@ -238,6 +253,18 @@ template isConstant(T, string member) {
 }
 
 /**
+    Gets whether the given member symbol is a signal.
+
+    Params:
+        T =         The owning class of the member.
+        member =    Name of the member
+*/
+template isSignal(T, string member) {
+    import godot.variant : Signal;
+    enum isSignal = is(typeof(__traits(getMember, T, member)) == Signal!U, U...);
+}
+
+/**
     Gets the getter and setter functions for a given property name.
 
     Params:
@@ -290,6 +317,20 @@ template boundMethodsOf(T)
 if (is(T : GDEObject)) {
     enum isMethod(string memberName) = is(FunctionTypeOf!(__traits(getMember, T, memberName)) == return);
     alias boundMethodsOf = Filter!(isMethod, boundMembersOf!T);
+}
+
+/**
+    Gets an alias sequence of the signals that are bound for a given class.
+
+    Params:
+        T = The GDEObject derived class to get signals for.
+*/
+template boundSignalsOf(T) 
+if (is(T : GDEObject)) {
+    import godot.variant : Signal;
+
+    enum isSignal(string memberName) = is(typeof(__traits(getMember, T, memberName)) == Signal!U, U...);
+    alias boundSignalsOf = Filter!(isSignal, boundMembersOf!T);
 }
 
 /**
@@ -363,19 +404,23 @@ template returnTypeOf(alias method) {
 }
 
 /**
-    Gets an alias sequence of parameters for a method.
+    Gets an alias sequence of parameters for a symbol.
 
     Params:
-        method = An alias to a method.
+        symbol = An alias to a symbol.
     
     Returns:
         An alias sequence of parameters.
 */
-template parametersOf(alias method) {
-    static if (is(Parameters!(method)))
-        alias parametersOf = Parameters!(method);
-    else static if (is(Parameters!(mixin(method))))
-        alias parametersOf = Parameters!(mixin(method));
+template parametersOf(alias symbol) {
+    import godot.variant : Signal;
+
+    static if (is(typeof(symbol) == Signal!U, U...))
+        alias parametersOf = symbol.ArgsT;
+    else static if (is(Parameters!(symbol)))
+        alias parametersOf = Parameters!(symbol);
+    else static if (is(Parameters!(mixin(symbol))))
+        alias parametersOf = Parameters!(mixin(symbol));
     else
         alias parametersOf = AliasSeq!();
 }

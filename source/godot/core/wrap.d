@@ -9,26 +9,8 @@ import godot.core.lifetime;
 import godot.variant;
 import numem.core.hooks;
 
-/**
-    Specifies the name a class should be bound as.
-*/
-struct class_name { string name; }
-
-/**
-    Specifies the icon to use for the type.
-*/
-struct class_icon { string path; }
-
-/**
-    Annotates the binding name for a method.
-*/
-struct method_name { string name; }
-
-/**
-    Annotates that the given class member should be hidden from
-    Godot.
-*/
-struct gd_hide;
+// UDAs
+public import godot.core.attribs;
 
 /**
     Gets a GDExtension MethodBindPtr for a given name and hash.
@@ -380,9 +362,20 @@ GDExtensionPropertyInfo gde_make_property_info(T)(string name, uint hint = 0, st
     else
         string class_name;
 
+    //  NOTE:   Godot cannot automatically detect more complex types like 
+    //          typed arrays, so we need to build hint strings for it.
+    //          The following block does so.
+    String* p_hint_string = gde_make_string(hintString);
+    if (hint == 0) {
+
+        // TODO: Arrays and Dictionaries.
+        static if (isPointer!T) {
+            hint = PROPERTY_HINT_INT_IS_POINTER;
+        }
+    }
+
     StringName* p_name = gde_make_string_name(name);
     StringName* p_classname = gde_make_string_name(class_name);
-    String* p_hint_string = gde_make_string(hintString);
     return GDExtensionPropertyInfo(
         type: variantTypeOf!T,
         name: p_name,
