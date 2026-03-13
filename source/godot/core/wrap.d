@@ -25,6 +25,12 @@ struct class_icon { string path; }
 struct method_name { string name; }
 
 /**
+    Annotates that the given class member should be hidden from
+    Godot.
+*/
+struct gd_hide;
+
+/**
     Gets a GDExtension MethodBindPtr for a given name and hash.
 
     Params:

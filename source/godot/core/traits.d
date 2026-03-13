@@ -311,7 +311,7 @@ if (is(T : GDEObject)) {
     template isAllowedMember(alias memberName) {
         enum visibility = __traits(getVisibility, __traits(getMember, T, memberName));
 
-        enum isVisible = visibility == "public" || visibility == "export";
+        enum isVisible = (visibility == "public" || visibility == "export") && !hasUDA!(__traits(getMember, T, memberName), gd_hide);
         enum isAllowedName = memberName[0..nu_min(2, memberName.length)] != "__";
         enum isAllowedMember = isVisible && isAllowedName;
     }
